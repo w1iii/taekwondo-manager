@@ -1,10 +1,18 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireRole } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { ChapterStatus } from "@/generated/prisma/client";
 
 export const metadata = { title: "Organizer Overview" };
 
 export default async function AdminOverviewPage() {
   const user = await requireRole("organizer");
+
+  const [pendingChapters, approvedChapters, totalChapters] = await Promise.all([
+    db.chapter.count({ where: { status: ChapterStatus.PENDING } }),
+    db.chapter.count({ where: { status: ChapterStatus.APPROVED } }),
+    db.chapter.count(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -20,28 +28,28 @@ export default async function AdminOverviewPage() {
         <Card>
           <CardHeader>
             <CardDescription>Chapters pending</CardDescription>
-            <CardTitle className="text-lg">0</CardTitle>
+            <CardTitle className="text-lg">{pendingChapters}</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Chapter registry ships in M2.
+            Waiting for your approval.
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>Payments pending</CardDescription>
-            <CardTitle className="text-lg">0</CardTitle>
+            <CardDescription>Chapters approved</CardDescription>
+            <CardTitle className="text-lg">{approvedChapters}</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Approval queue ships in M6.
+            Head coaches can sign in and register teams.
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>Published events</CardDescription>
-            <CardTitle className="text-lg">0</CardTitle>
+            <CardDescription>Total registrations</CardDescription>
+            <CardTitle className="text-lg">{totalChapters}</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Event CRUD ships in M3.
+            All submitted chapter registrations.
           </CardContent>
         </Card>
         <Card>

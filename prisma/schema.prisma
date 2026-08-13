@@ -1,0 +1,33 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ChapterStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Chapter {
+  id              String        @id @default(cuid())
+  name            String
+  province        String
+  city            String
+  gcashNumber     String
+  logoUrl         String?
+  headCoachName   String
+  headCoachEmail  String
+  status          ChapterStatus @default(PENDING)
+  rejectionReason String?
+  headCoachUserId String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([status])
+  @@index([province])
+}

@@ -10,6 +10,7 @@ export type SessionUser = {
   name?: string;
   email?: string;
   role: Role;
+  chapterId?: string;
 };
 
 export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
@@ -20,14 +21,17 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
     const user = await currentUser();
     if (!user) return null;
 
-    const metadata = user.publicMetadata as { role?: unknown } | undefined;
+    const metadata = user.publicMetadata as { role?: unknown; chapterId?: unknown } | undefined;
     const role = isRole(metadata?.role) ? metadata.role : DEFAULT_ROLE;
+    const chapterId =
+      typeof metadata?.chapterId === "string" ? metadata.chapterId : undefined;
 
     return {
       userId,
       name: user.fullName ?? undefined,
       email: user.primaryEmailAddress?.emailAddress ?? undefined,
       role,
+      chapterId,
     };
   } catch {
     return null;

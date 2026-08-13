@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { requireRole } from "@/lib/auth";
+import { claimChapterForUser } from "@/lib/chapters";
 import type { NavItem } from "@/components/nav-link";
 
 const nav: NavItem[] = [
@@ -17,6 +18,7 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const user = await requireRole("coach");
+  await claimChapterForUser(user);
   return (
     <AppShell user={user} role={user.role} nav={nav}>
       {children}
