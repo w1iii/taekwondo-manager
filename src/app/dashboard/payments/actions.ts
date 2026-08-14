@@ -7,6 +7,8 @@ import { getChapterForUser } from "@/lib/chapters";
 import { db } from "@/lib/db";
 import { parsePaymentFormData, type PaymentFormState } from "@/lib/payments";
 import { saveUpload } from "@/lib/uploads";
+import { notify } from "@/lib/notifications";
+import { formatPesos } from "@/lib/events";
 import { EventStatus, PaymentStatus } from "@/generated/prisma/client";
 
 async function paymentDeps(eventId: string, chapterId: string) {
@@ -87,6 +89,14 @@ export async function submitPayment(formData: FormData): Promise<PaymentFormStat
       },
     });
   }
+
+  await notify(
+    "ORGANIZER",
+    null,
+    "New payment submission",
+    `${chapter.name} — ${event.name} (${formatPesos(amountPesos)}).`,
+    "/admin/payments",
+  );
 
   revalidatePath("/dashboard/payments");
   revalidatePath("/admin/payments");

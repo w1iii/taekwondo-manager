@@ -1,6 +1,8 @@
 import { AppShell } from "@/components/app-shell";
-import { requireRole } from "@/lib/auth";
-import { claimChapterForUser } from "@/lib/chapters";
+import { requireRole, type SessionUser } from "@/lib/auth";
+import { claimChapterForUser, getChapterForUser } from "@/lib/chapters";
+import { listNotifications, toNotifRole } from "@/lib/notifications";
+import { NotificationBell } from "@/components/notification-bell";
 import type { NavItem } from "@/components/nav-link";
 
 const nav: NavItem[] = [
@@ -18,10 +20,21 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const user = await requireRole("coach");
-  await claimChapterForUser(user);
+  const chapter = await claimAndGetChapter(user);
+  const { items, unreadCount } = await listNotifications(toNotifRole(user.role), chapter?.id ?? null);
   return (
-    <AppShell user={user} role={user.role} nav={nav}>
+    <AppShell
+      user={user}
+      role={user.role}
+      nav={nav}
+      bell={<NotificationBell items={items} unreadCount={unreadCount} />}
+    >
       {children}
     </AppShell>
   );
+}
+
+async function claimAndGetChapter(user: SessionUser) {
+  await claimChapterForUser(user);
+  return getChapterForUser(user);
 }

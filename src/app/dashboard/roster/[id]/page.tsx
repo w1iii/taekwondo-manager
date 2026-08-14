@@ -10,7 +10,7 @@ import { getChapterForUser } from "@/lib/chapters";
 import { db } from "@/lib/db";
 import { formatDate, formatPesos } from "@/lib/events";
 import { genderLabel } from "@/lib/athletes";
-import { ageForEventYear } from "@/lib/brackets";
+import { athletesInDivision } from "@/lib/divisions";
 import { proofStatusLabel, proofStatusVariant } from "@/lib/payments";
 import { PaymentStatus } from "@/generated/prisma/client";
 
@@ -34,7 +34,7 @@ export default async function AthleteDetailPage({
 
   const enrollments = await db.enrollment.findMany({
     where: { athleteId: id, chapterId: chapter.id },
-    include: { event: { include: { divisions: true } } },
+    include: { event: { include: { divisions: { include: { weightClass: true } } } } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -89,12 +89,20 @@ export default async function AthleteDetailPage({
         ) : (
           <ul className="space-y-3">
             {enrollments.map(({ id: enrollmentId, event }) => {
-              const age = ageForEventYear(athlete.birthYear, event.eventDate.getFullYear());
-              const division = event.divisions.find(
-                (d) =>
-                  d.gender === athlete.gender &&
-                  age >= d.minAge &&
-                  age <= d.maxAge,
+              const year = event.eventDate.getFullYear();
+              const divisions = event.divisions.filter((d) =>
+                athletesInDivision(
+                  {
+                    gender: d.gender,
+                    eventType: d.eventType,
+                    minAge: d.minAge,
+                    maxAge: d.maxAge,
+                    beltType: d.beltType,
+                    weightClass: d.weightClass,
+                  },
+                  year,
+                  [athlete],
+                ).length > 0,
               );
               const payment = paymentByEvent.get(event.id);
 
@@ -111,8 +119,10 @@ export default async function AthleteDetailPage({
                       </p>
                       <p>
                         Division:{" "}
-                        {division ? (
-                          <span className="font-medium">{division.name}</span>
+                        {divisions.length > 0 ? (
+                          <span className="font-medium">
+                            {divisions.map((d) => d.name).join(", ")}
+                          </span>
                         ) : (
                           <span className="text-muted-foreground">Not generated yet</span>
                         )}

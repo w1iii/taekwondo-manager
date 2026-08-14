@@ -6,12 +6,28 @@ import { Button } from "@/components/ui/button";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatDate } from "@/lib/events";
-import { athletesInDivision } from "@/lib/brackets";
-import { EventStatus, type Event, type Division } from "@/generated/prisma/client";
+import { athletesInDivision, EVENT_TYPE_LABELS } from "@/lib/divisions";
+import {
+  BeltType,
+  EventStatus,
+  EventType,
+  type Event,
+  type Division,
+} from "@/generated/prisma/client";
 import { ActionButton } from "@/components/action-button";
 import { generateBracket, generateDivisions, resetBracket } from "./actions";
 
 export const metadata = { title: "Brackets" };
+
+type AthleteRow = {
+  id: string;
+  gender: "MALE" | "FEMALE";
+  birthYear: number;
+  weightKg: number;
+  beltType: BeltType | null;
+};
+
+type DivisionRow = Division & { weightClass: { minKg: number | null; maxKg: number | null } | null };
 
 export default async function BracketsAdminPage() {
   await requireRole("organizer");
@@ -19,7 +35,7 @@ export default async function BracketsAdminPage() {
   const events = await db.event.findMany({
     where: { status: EventStatus.PUBLISHED },
     include: {
-      divisions: true,
+      divisions: { include: { weightClass: true } },
       enrollments: { include: { athlete: true } },
     },
     orderBy: { eventDate: "desc" },
@@ -40,8 +56,8 @@ export default async function BracketsAdminPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Brackets</h1>
         <p className="text-sm text-muted-foreground">
-          Generate divisions from registrations, then build single-elimination
-          brackets for each division.
+          Generate divisions from registrations (WT age groups, weight classes
+          and belt ranks), then build single-elimination brackets for each.
         </p>
       </div>
 
@@ -64,11 +80,19 @@ export default async function BracketsAdminPage() {
   );
 }
 
+function weightLabel(division: DivisionRow): string {
+  const wc = division.weightClass;
+  if (!wc) return "—";
+  if (wc.maxKg != null) return `≤ ${wc.maxKg} kg`;
+  if (wc.minKg != null) return `> ${wc.minKg} kg`;
+  return "—";
+}
+
 function EventSection({
   event,
   cellCountByDivision,
 }: {
-  event: Event & { divisions: Division[]; enrollments: { athlete: { id: string; gender: "MALE" | "FEMALE"; birthYear: number } }[] };
+  event: Event & { divisions: DivisionRow[]; enrollments: { athlete: AthleteRow }[] };
   cellCountByDivision: Map<string, number>;
 }) {
   const year = event.eventDate.getFullYear();
@@ -85,7 +109,27 @@ function EventSection({
             {athletes.length === 1 ? "" : "s"}
           </p>
         </div>
-        <form action={generateDivisions}>
+        <form
+          action={generateDivisions}
+          className="flex flex-wrap items-end gap-4 rounded-lg border bg-card p-3"
+        >
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Event types
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {(Object.keys(EVENT_TYPE_LABELS) as EventType[]).map((t) => (
+                <label key={t} className="flex items-center gap-1.5 text-sm">
+                  <input
+                    type="checkbox"
+                    name={`eventType:${t}`}
+                    defaultChecked={t === EventType.KYORUGI || t === EventType.POOMSAE}
+                  />
+                  {EVENT_TYPE_LABELS[t]}
+                </label>
+              ))}
+            </div>
+          </div>
           <input type="hidden" name="eventId" value={event.id} />
           <ActionButton
             label={event.divisions.length > 0 ? "Regenerate divisions" : "Generate divisions"}
@@ -103,7 +147,18 @@ function EventSection({
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {event.divisions.map((division) => {
-            const count = athletesInDivision(division, year, athletes).length;
+            const count = athletesInDivision(
+              {
+                gender: division.gender,
+                eventType: division.eventType,
+                minAge: division.minAge,
+                maxAge: division.maxAge,
+                beltType: division.beltType,
+                weightClass: division.weightClass,
+              },
+              year,
+              athletes,
+            ).length;
             const hasBracket = (cellCountByDivision.get(division.id) ?? 0) > 0;
             return (
               <li key={division.id} className="rounded-lg border bg-card p-4">
@@ -114,6 +169,13 @@ function EventSection({
                     {count}
                   </p>
                 </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {EVENT_TYPE_LABELS[division.eventType]} ·{" "}
+                  {division.minAge != null ? division.minAge : "?"}–
+                  {division.maxAge != null ? division.maxAge : "+"} ·{" "}
+                  {weightLabel(division)} ·{" "}
+                  {division.beltType ? `Belt ${division.beltType}` : "No belt"}
+                </p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {hasBracket ? (
                     <Button

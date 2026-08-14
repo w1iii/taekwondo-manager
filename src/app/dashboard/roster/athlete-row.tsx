@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { GENDER_OPTIONS, genderLabel, type AthleteFormState } from "@/lib/athletes";
+import { GENDER_OPTIONS, BELT_OPTIONS, beltLabel, genderLabel, type AthleteFormState } from "@/lib/athletes";
 import type { Athlete, Gender } from "@/generated/prisma/client";
 
 const initialState: AthleteFormState = { ok: false, error: "" };
@@ -93,6 +93,22 @@ export function AthleteRow({
                 defaultValue={athlete.weightKg}
               />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`beltType-${athlete.id}`}>Belt</Label>
+              <select
+                id={`beltType-${athlete.id}`}
+                name="beltType"
+                defaultValue={athlete.beltType ?? ""}
+                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                <option value="">No belt</option>
+                {BELT_OPTIONS.map((b) => (
+                  <option key={b.value} value={b.value}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {state.ok ? null : state.error ? (
@@ -135,6 +151,7 @@ export function AthleteRow({
             <Badge variant="secondary">{genderLabel(athlete.gender as Gender)}</Badge>
             <span>Born {athlete.birthYear}</span>
             {athlete.weightKg > 0 ? <span>{athlete.weightKg} kg</span> : null}
+            {athlete.beltType ? <Badge variant="outline">{beltLabel(athlete.beltType)}</Badge> : null}
           </div>
         </div>
       </Link>

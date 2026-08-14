@@ -1,5 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { requireRole } from "@/lib/auth";
+import { listNotifications, toNotifRole } from "@/lib/notifications";
+import { NotificationBell } from "@/components/notification-bell";
 import type { NavItem } from "@/components/nav-link";
 
 const nav: NavItem[] = [
@@ -17,8 +19,14 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   const user = await requireRole("organizer");
+  const { items, unreadCount } = await listNotifications(toNotifRole(user.role), null);
   return (
-    <AppShell user={user} role={user.role} nav={nav}>
+    <AppShell
+      user={user}
+      role={user.role}
+      nav={nav}
+      bell={<NotificationBell items={items} unreadCount={unreadCount} />}
+    >
       {children}
     </AppShell>
   );

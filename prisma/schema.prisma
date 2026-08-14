@@ -29,6 +29,27 @@ enum PaymentStatus {
   REJECTED
 }
 
+enum Role {
+  COACH
+  ORGANIZER
+}
+
+enum EventType {
+  KYORUGI
+  POOMSAE
+  FREESTYLE_POOMSAE
+  BREAKING
+}
+
+enum BeltType {
+  WHITE
+  YELLOW
+  GREEN
+  BLUE
+  RED
+  BLACK
+}
+
 model Event {
   id                   String      @id @default(cuid())
   name                 String
@@ -55,6 +76,7 @@ model Athlete {
   gender      Gender
   birthYear   Int
   weightKg    Int          @default(0)
+  beltType    BeltType?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   chapter     Chapter      @relation(fields: [chapterId], references: [id], onDelete: Cascade)
@@ -63,6 +85,19 @@ model Athlete {
 
   @@index([chapterId])
   @@index([chapterId, gender])
+}
+
+model WeightClass {
+  id        String     @id @default(cuid())
+  gender    Gender
+  name      String
+  minKg     Float?
+  maxKg     Float?
+  sortOrder Int
+  divisions Division[]
+
+  @@unique([gender, name])
+  @@index([gender, sortOrder])
 }
 
 model Enrollment {
@@ -100,17 +135,23 @@ model TeamPayment {
 }
 
 model Division {
-  id        String   @id @default(cuid())
-  eventId   String
-  name      String
-  gender    Gender
-  minAge    Int
-  maxAge    Int
-  createdAt DateTime @default(now())
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  brackets  BracketCell[]
+  id            String      @id @default(cuid())
+  eventId       String
+  name          String
+  gender        Gender
+  eventType     EventType
+  divisionKey   String
+  minAge        Int?
+  maxAge        Int?
+  weightClassId String?
+  beltType      BeltType?
+  createdAt     DateTime    @default(now())
+  event         Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  weightClass   WeightClass? @relation(fields: [weightClassId], references: [id], onDelete: SetNull)
+  brackets      BracketCell[]
 
-  @@unique([eventId, name])
+  @@unique([eventId, divisionKey])
+  @@index([eventType])
 }
 
 model BracketCell {
@@ -145,7 +186,23 @@ model Chapter {
   athletes        Athlete[]
   enrollments     Enrollment[]
   payments        TeamPayment[]
+  notifications   Notification[]
 
   @@index([status])
   @@index([province])
+}
+
+model Notification {
+  id              String   @id @default(cuid())
+  role            Role
+  targetChapterId String?
+  title           String
+  body            String?
+  link            String?
+  readAt          DateTime?
+  createdAt       DateTime @default(now())
+  chapter         Chapter? @relation(fields: [targetChapterId], references: [id], onDelete: Cascade)
+
+  @@index([role, readAt])
+  @@index([role, targetChapterId, readAt])
 }

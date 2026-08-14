@@ -1,60 +1,6 @@
 import "server-only";
 
-import type { Gender } from "@/generated/prisma/client";
-
-export type AgeGroup = { name: string; minAge: number; maxAge: number };
-
-export function ageGroupForAge(age: number): AgeGroup {
-  if (age <= 14) return { name: "Youth", minAge: 5, maxAge: 14 };
-  if (age <= 17) return { name: "Junior", minAge: 15, maxAge: 17 };
-  return { name: "Senior", minAge: 18, maxAge: 40 };
-}
-
-export function ageForEventYear(birthYear: number, eventYear: number): number {
-  return eventYear - birthYear;
-}
-
-export function divisionName(gender: Gender, group: string): string {
-  const label = gender === "MALE" ? "Male" : "Female";
-  return `${label} ${group}`;
-}
-
-export type DivisionInput = { name: string; gender: Gender; minAge: number; maxAge: number };
-
-/**
- * Interim division system (gender + age group). Replaced by fixed WT
- * weight classes in M10. Athletes outside the 5–40 age range are skipped.
- */
-export function buildDivisions(
-  eventYear: number,
-  athletes: { gender: Gender; birthYear: number }[],
-): DivisionInput[] {
-  const map = new Map<string, DivisionInput>();
-  for (const athlete of athletes) {
-    const age = ageForEventYear(athlete.birthYear, eventYear);
-    const group = ageGroupForAge(age);
-    if (age < group.minAge || age > group.maxAge) continue;
-    const name = divisionName(athlete.gender, group.name);
-    if (!map.has(name)) {
-      map.set(name, { name, gender: athlete.gender, minAge: group.minAge, maxAge: group.maxAge });
-    }
-  }
-  return [...map.values()];
-}
-
-export function athletesInDivision(
-  division: { gender: Gender; minAge: number; maxAge: number },
-  eventYear: number,
-  athletes: { id: string; gender: Gender; birthYear: number }[],
-): { id: string }[] {
-  return athletes
-    .filter((a) => a.gender === division.gender)
-    .filter((a) => {
-      const age = ageForEventYear(a.birthYear, eventYear);
-      return age >= division.minAge && age <= division.maxAge;
-    })
-    .map((a) => ({ id: a.id }));
-}
+export { ageForEventYear, athletesInDivision } from "./divisions";
 
 /**
  * Standard single-elimination layout: seed values by bracket position.

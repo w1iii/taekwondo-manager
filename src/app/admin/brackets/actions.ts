@@ -5,12 +5,18 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
-  buildDivisions,
   generateBracketCells,
   resolveByeWinners,
-  athletesInDivision,
   participantsOf,
 } from "@/lib/brackets";
+import { buildDivisions, athletesInDivision } from "@/lib/divisions";
+import { EventType } from "@/generated/prisma/client";
+const ALL_EVENT_TYPES = [
+  EventType.KYORUGI,
+  EventType.POOMSAE,
+  EventType.FREESTYLE_POOMSAE,
+  EventType.BREAKING,
+];
 
 export async function generateDivisions(formData: FormData): Promise<void> {
   await requireRole("organizer");
@@ -21,14 +27,19 @@ export async function generateDivisions(formData: FormData): Promise<void> {
   const event = await db.event.findUnique({ where: { id: eventId } });
   if (!event) return;
 
-  const enrollments = await db.enrollment.findMany({
-    where: { eventId },
-    include: { athlete: true },
-  });
+  const selected = ALL_EVENT_TYPES.filter((t) => formData.get(`eventType:${t}`) === "on");
+  const eventTypes = selected.length > 0 ? selected : [EventType.KYORUGI, EventType.POOMSAE];
+
+  const [enrollments, weightClasses] = await Promise.all([
+    db.enrollment.findMany({ where: { eventId }, include: { athlete: true } }),
+    db.weightClass.findMany({ orderBy: [{ gender: "asc" }, { sortOrder: "asc" }] }),
+  ]);
 
   const divisions = buildDivisions(
     event.eventDate.getFullYear(),
     enrollments.map((e) => e.athlete),
+    weightClasses,
+    eventTypes,
   );
 
   await db.$transaction([
@@ -49,7 +60,7 @@ export async function generateBracket(formData: FormData): Promise<void> {
 
   const division = await db.division.findUnique({
     where: { id: divisionId },
-    include: { event: true },
+    include: { event: true, weightClass: true },
   });
   if (!division) return;
 
@@ -60,7 +71,14 @@ export async function generateBracket(formData: FormData): Promise<void> {
   });
 
   const athletes = athletesInDivision(
-    division,
+    {
+      gender: division.gender,
+      eventType: division.eventType,
+      minAge: division.minAge,
+      maxAge: division.maxAge,
+      beltType: division.beltType,
+      weightClass: division.weightClass,
+    },
     division.event.eventDate.getFullYear(),
     enrollments.map((e) => e.athlete),
   );
@@ -73,6 +91,21 @@ export async function generateBracket(formData: FormData): Promise<void> {
         data: cells.map((c) => ({ ...c, divisionId })),
       }),
     ]);
+
+    const chapters = await db.enrollment.findMany({
+      where: { eventId: division.eventId },
+      distinct: ["chapterId"],
+      select: { chapterId: true },
+    });
+    await db.notification.createMany({
+      data: chapters.map((c) => ({
+        role: "COACH",
+        targetChapterId: c.chapterId,
+        title: "Brackets published",
+        body: `${division.name} is live for ${division.event.name}.`,
+        link: "/dashboard/brackets",
+      })),
+    });
   }
 
   revalidatePath("/admin/brackets");

@@ -13,11 +13,13 @@ export function AppShell({
   user,
   role,
   nav,
+  bell,
   children,
 }: {
   user: SessionUser;
   role: Role;
   nav: NavItem[];
+  bell?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -48,6 +50,7 @@ export function AppShell({
         </Link>
 
         <div className="ml-auto flex items-center gap-3">
+          {bell}
           <div className="hidden text-right text-sm sm:block">
             <p className="font-medium leading-tight">{user.name ?? "User"}</p>
             <p className="text-xs text-muted-foreground">{user.email}</p>

@@ -60,10 +60,26 @@ export async function setEventStatus(formData: FormData): Promise<void> {
     return;
   }
 
-  await db.event.update({
+  const event = await db.event.update({
     where: { id },
     data: { status: rawStatus },
   });
+
+  if (rawStatus === EventStatus.PUBLISHED) {
+    const chapters = await db.chapter.findMany({
+      where: { status: "APPROVED" },
+      select: { id: true },
+    });
+    await db.notification.createMany({
+      data: chapters.map((c) => ({
+        role: "COACH",
+        targetChapterId: c.id,
+        title: "Registration open",
+        body: `${event.name} is accepting registrations.`,
+        link: "/dashboard/events",
+      })),
+    });
+  }
 
   revalidatePath("/admin/events");
   revalidatePath("/admin");

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { GENDER_OPTIONS, genderLabel } from "@/lib/athletes";
+import { GENDER_OPTIONS, genderLabel, beltLabel } from "@/lib/athletes";
 import { Gender } from "@/generated/prisma/client";
 
 export const metadata = { title: "Athletes" };
@@ -56,8 +56,8 @@ export default async function AthletesAdminPage({
     divisionFilter = {
       gender: selectedDivision.gender,
       eventId: selectedDivision.eventId,
-      birthYearMin: year - selectedDivision.maxAge,
-      birthYearMax: year - selectedDivision.minAge,
+      birthYearMin: selectedDivision.maxAge != null ? year - selectedDivision.maxAge : 1900,
+      birthYearMax: selectedDivision.minAge != null ? year - selectedDivision.minAge : year,
     };
   }
 
@@ -205,6 +205,9 @@ export default async function AthletesAdminPage({
                         <Badge variant="secondary">
                           {genderLabel(athlete.gender as Gender)}
                         </Badge>
+                        {athlete.beltType ? (
+                          <Badge variant="outline">{beltLabel(athlete.beltType)}</Badge>
+                        ) : null}
                       </span>
                       <span className="flex items-center gap-2 text-sm text-muted-foreground">
                         <span>

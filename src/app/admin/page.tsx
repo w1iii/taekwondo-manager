@@ -8,12 +8,14 @@ export const metadata = { title: "Organizer Overview" };
 export default async function AdminOverviewPage() {
   const user = await requireRole("organizer");
 
-  const [pendingChapters, approvedChapters, publishedEvents, pendingPayments] =
+  const [pendingChapters, approvedChapters, publishedEvents, pendingPayments, divisionCount, weightClassCount] =
     await Promise.all([
       db.chapter.count({ where: { status: ChapterStatus.PENDING } }),
       db.chapter.count({ where: { status: ChapterStatus.APPROVED } }),
       db.event.count({ where: { status: EventStatus.PUBLISHED } }),
       db.teamPayment.count({ where: { status: PaymentStatus.PENDING } }),
+      db.division.count(),
+      db.weightClass.count(),
     ]);
 
   return (
@@ -66,10 +68,19 @@ export default async function AdminOverviewPage() {
         <Card>
           <CardHeader>
             <CardDescription>Divisions</CardDescription>
-            <CardTitle className="text-lg">0</CardTitle>
+            <CardTitle className="text-lg">{divisionCount}</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Seeded with fixed WT classes in M10.
+            Generated from WT age groups and weight classes.
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Weight classes</CardDescription>
+            <CardTitle className="text-lg">{weightClassCount}</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            WT Senior table reused across age bands.
           </CardContent>
         </Card>
       </div>

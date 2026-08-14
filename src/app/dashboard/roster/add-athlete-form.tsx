@@ -8,7 +8,7 @@ import { Loader2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { GENDER_OPTIONS, type AthleteFormState } from "@/lib/athletes";
+import { GENDER_OPTIONS, BELT_OPTIONS, type AthleteFormState } from "@/lib/athletes";
 
 const initialState: AthleteFormState = { ok: false, error: "" };
 
@@ -68,6 +68,24 @@ export function AddAthleteForm({
           <Label htmlFor="weightKg">Weight (kg, optional)</Label>
           <Input id="weightKg" name="weightKg" type="number" min={0} max={200} step={1} placeholder="e.g. 45" />
           <p className="text-xs text-muted-foreground">Used for weight-class divisions.</p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="beltType">Belt (optional)</Label>
+          <select
+            id="beltType"
+            name="beltType"
+            defaultValue=""
+            className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            <option value="">No belt</option>
+            {BELT_OPTIONS.map((b) => (
+              <option key={b.value} value={b.value}>
+                {b.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">Used for poomsae divisions.</p>
         </div>
       </div>
 
