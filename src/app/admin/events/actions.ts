@@ -17,7 +17,7 @@ async function parseImage(formData: FormData): Promise<string | null | { error: 
     return await saveUpload(image, "events");
   } catch (error) {
     return {
-      error: error instanceof UploadError ? error.message : "Image exceeds 3MB. choose another image.",
+      error: error instanceof UploadError ? error.message : "Image exceeds 5MB. choose another image.",
     };
   }
 }
