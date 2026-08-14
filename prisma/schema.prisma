@@ -86,6 +86,9 @@ model Athlete {
 
   @@index([chapterId])
   @@index([chapterId, gender])
+  // Accelerates the admin athletes list `name { contains, mode: insensitive }`
+  // filter (ILIKE '%q%'), which a plain btree index cannot serve.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Athlete_name_trgm_idx")
 }
 
 model WeightClass {
@@ -178,6 +181,11 @@ model Chapter {
   gcashNumber     String
   logoUrl         String?
   headCoachName   String
+  // No @unique here: uniqueness for active rows is enforced by a partial
+  // unique index on (headCoachEmail) WHERE status IN ('PENDING','APPROVED'),
+  // created in migration 20260813173221_add_chapter. It allows a REJECTED
+  // chapter to free the email for re-registration. Prisma cannot express
+  // partial indexes in the schema.
   headCoachEmail  String
   status          ChapterStatus @default(PENDING)
   rejectionReason String?

@@ -6,6 +6,14 @@ import { Button } from "@/components/ui/button";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { PaymentReviewActions } from "./payment-review";
+import { Pagination } from "@/components/pagination";
+import {
+  PAGE_SIZE,
+  pageCount,
+  pageHref,
+  clampPage,
+  parsePage,
+} from "@/lib/pagination";
 
 export const metadata = { title: "Payments" };
 
@@ -83,21 +91,72 @@ function Section({
   );
 }
 
-async function loadPayments() {
+async function loadPayments(status: PaymentStatus, page: number) {
   return db.teamPayment.findMany({
+    where: { status },
     orderBy: { submittedAt: "desc" },
+    skip: (page - 1) * PAGE_SIZE,
+    take: PAGE_SIZE,
     include: { event: true, chapter: true },
   });
 }
 
-export default async function PaymentsAdminPage() {
+export default async function PaymentsAdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    pending?: string;
+    approved?: string;
+    rejected?: string;
+  }>;
+}) {
   await requireRole("organizer");
 
-  const payments = await loadPayments();
+  const params = await searchParams;
 
-  const pending = payments.filter((p) => p.status === PaymentStatus.PENDING);
-  const approved = payments.filter((p) => p.status === PaymentStatus.APPROVED);
-  const rejected = payments.filter((p) => p.status === PaymentStatus.REJECTED);
+  const [[pendingCount, approvedCount, rejectedCount], [pending, approved, rejected]] =
+    await Promise.all([
+      Promise.all([
+        db.teamPayment.count({ where: { status: PaymentStatus.PENDING } }),
+        db.teamPayment.count({ where: { status: PaymentStatus.APPROVED } }),
+        db.teamPayment.count({ where: { status: PaymentStatus.REJECTED } }),
+      ]),
+      Promise.all([
+        loadPayments(PaymentStatus.PENDING, parsePage(params.pending)),
+        loadPayments(PaymentStatus.APPROVED, parsePage(params.approved)),
+        loadPayments(PaymentStatus.REJECTED, parsePage(params.rejected)),
+      ]),
+    ]);
+
+  const sections = [
+    {
+      key: "pending",
+      title: "Pending review",
+      count: pendingCount,
+      rows: pending,
+      page: parsePage(params.pending),
+    },
+    {
+      key: "approved",
+      title: "Approved",
+      count: approvedCount,
+      rows: approved,
+      page: parsePage(params.approved),
+    },
+    {
+      key: "rejected",
+      title: "Rejected",
+      count: rejectedCount,
+      rows: rejected,
+      page: parsePage(params.rejected),
+    },
+  ].map((s) => ({
+    ...s,
+    totalPages: pageCount(s.count),
+    page: clampPage(s.page, pageCount(s.count)),
+  }));
+
+  const anyPayments = sections.some((s) => s.count > 0);
 
   return (
     <div className="space-y-8">
@@ -108,7 +167,7 @@ export default async function PaymentsAdminPage() {
         </p>
       </div>
 
-      {payments.length === 0 ? (
+      {!anyPayments ? (
         <Card>
           <CardContent className="text-sm text-muted-foreground">
             No payments submitted yet.
@@ -116,21 +175,20 @@ export default async function PaymentsAdminPage() {
         </Card>
       ) : (
         <>
-          <Section title="Pending review" count={pending.length}>
-            {pending.map((p) => (
-              <PaymentCard key={p.id} payment={p} />
-            ))}
-          </Section>
-          <Section title="Approved" count={approved.length}>
-            {approved.map((p) => (
-              <PaymentCard key={p.id} payment={p} />
-            ))}
-          </Section>
-          <Section title="Rejected" count={rejected.length}>
-            {rejected.map((p) => (
-              <PaymentCard key={p.id} payment={p} />
-            ))}
-          </Section>
+          {sections.map((s) =>
+            s.count === 0 ? null : (
+              <Section key={s.key} title={s.title} count={s.count}>
+                {s.rows.map((p) => (
+                  <PaymentCard key={p.id} payment={p} />
+                ))}
+                <Pagination
+                  page={s.page}
+                  totalPages={s.totalPages}
+                  buildHref={(page) => pageHref(params, s.key, page)}
+                />
+              </Section>
+            ),
+          )}
         </>
       )}
     </div>

@@ -3,14 +3,14 @@ import { PaymentStatus } from "@/generated/prisma/client";
 import { proofStatusLabel, proofStatusVariant } from "@/lib/payments";
 
 export function ProofView({
-  proofUrl,
+  paymentId,
   referenceNo,
   amount,
   status,
   submitted,
   rejectionReason,
 }: {
-  proofUrl: string;
+  paymentId: string;
   referenceNo: string;
   amount: string;
   status: PaymentStatus;
@@ -19,9 +19,9 @@ export function ProofView({
 }) {
   return (
     <div className="space-y-4">
-      {/* eslint-disable-next-line @next/next/no-img-element -- auth-gated local files must load with the session cookie */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- proofs stream through the authenticated /api/payments/[id]/proof route, which checks ownership before signing a short-lived download URL */}
       <img
-        src={proofUrl}
+        src={`/api/payments/${paymentId}/proof`}
         alt="Proof of payment screenshot"
         className="max-h-[60vh] w-full rounded-lg border object-contain bg-muted/40"
       />

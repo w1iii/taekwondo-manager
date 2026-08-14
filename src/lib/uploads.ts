@@ -1,6 +1,6 @@
 import "server-only";
 
-import { mkdir, rm, writeFile } from "fs/promises";
+import { mkdir, readFile, rm, writeFile } from "fs/promises";
 import path from "path";
 import { v2 as cloudinary } from "cloudinary";
 
@@ -8,8 +8,38 @@ export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
 export class UploadError extends Error {}
 
+const MIME: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  avif: "image/avif",
+  svg: "image/svg+xml",
+  bmp: "image/bmp",
+  ico: "image/x-icon",
+  tiff: "image/tiff",
+  tif: "image/tiff",
+  heic: "image/heic",
+  heif: "image/heif",
+};
+
+function mimeFromExt(ext: string): string {
+  return MIME[ext] ?? "application/octet-stream";
+}
+
 function hasCloudinary(): boolean {
   return Boolean(process.env.CLOUDINARY_URL);
+}
+
+function localUploadsAllowed(): boolean {
+  const explicit = process.env.ALLOW_LOCAL_UPLOADS;
+  if (explicit) return explicit !== "false";
+  return process.env.NODE_ENV !== "production";
+}
+
+function extFromUrl(url: string): string {
+  return url.split("?")[0].split(".").pop()?.toLowerCase() ?? "png";
 }
 
 function publicIdFromUrl(url: string): string | null {
@@ -28,10 +58,20 @@ function publicIdFromUrl(url: string): string | null {
   }
 }
 
+export type UploadOptions = {
+  /**
+   * Upload as a Cloudinary `private` asset (never publicly reachable via a
+   * guessed URL). Used for payment proofs. Private assets must be streamed
+   * through an authenticated route that signs a short-lived download URL.
+   */
+  private?: boolean;
+};
+
 export async function saveUpload(
   file: File,
   folder: string,
   maxBytes = MAX_UPLOAD_BYTES,
+  options: UploadOptions = {},
 ): Promise<string> {
   if (!file || file.size === 0) {
     throw new UploadError("Attach a file.");
@@ -52,8 +92,15 @@ export async function saveUpload(
       folder,
       public_id: filename,
       resource_type: "image",
+      type: options.private ? "private" : "upload",
     });
     return result.secure_url;
+  }
+
+  if (!localUploadsAllowed()) {
+    throw new UploadError(
+      "Cloudinary is not configured. Uploads are unavailable — contact the administrator.",
+    );
   }
 
   const ext = file.name.split(".").pop()?.toLowerCase() || "png";
@@ -76,4 +123,51 @@ export async function deleteUpload(url: string): Promise<void> {
   if (publicId) {
     await cloudinary.uploader.destroy(publicId);
   }
+}
+
+/**
+ * Streams a stored upload as bytes. Used to gate payment-proof access behind
+ * authentication: callers must verify the requester owns the payment before
+ * calling this.
+ *
+ * Cloudinary assets are fetched through a short-lived signed URL so the raw
+ * `secure_url` (public-by-URL) is never handed to the browser. Local files
+ * are read from disk (development fallback only).
+ */
+export async function getStoredFile(
+  url: string,
+): Promise<{ data: Buffer; contentType: string } | null> {
+  if (!url) return null;
+
+  if (url.startsWith("/uploads/")) {
+    const rel = url.replace(/^\/uploads\//, "");
+    const filePath = path.join(process.cwd(), ".uploads", rel);
+    try {
+      const data = await readFile(filePath);
+      return { data, contentType: mimeFromExt(extFromUrl(url)) };
+    } catch {
+      return null;
+    }
+  }
+
+  const publicId = publicIdFromUrl(url);
+  if (!publicId) return null;
+  const format = extFromUrl(url);
+  const expiresAt = Math.floor(Date.now() / 1000) + 3600;
+
+  const signedUrl = (type: "upload" | "private") =>
+    cloudinary.utils.private_download_url(publicId, format, {
+      resource_type: "image",
+      type,
+      attachment: false,
+      expires_at: expiresAt,
+    });
+
+  let response = await fetch(signedUrl("private"));
+  if (!response.ok) response = await fetch(signedUrl("upload"));
+  if (!response.ok) return null;
+
+  const contentType =
+    response.headers.get("content-type") ?? mimeFromExt(format);
+  return { data: Buffer.from(await response.arrayBuffer()), contentType };
 }

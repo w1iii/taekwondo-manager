@@ -7,6 +7,14 @@ import { db } from "@/lib/db";
 import { CHAPTER_STATUS_LABELS } from "@/lib/chapters";
 import { ChapterStatus, type Chapter } from "@/generated/prisma/client";
 import { ChapterActions } from "./chapter-actions";
+import { Pagination } from "@/components/pagination";
+import {
+  PAGE_SIZE,
+  pageCount,
+  pageHref,
+  clampPage,
+  parsePage,
+} from "@/lib/pagination";
 
 export const metadata = { title: "Chapters" };
 
@@ -109,16 +117,71 @@ function Section({
   );
 }
 
-export default async function ChaptersPage() {
+async function loadChapters(status: ChapterStatus, page: number) {
+  return db.chapter.findMany({
+    where: { status },
+    orderBy: { createdAt: "desc" },
+    skip: (page - 1) * PAGE_SIZE,
+    take: PAGE_SIZE,
+  });
+}
+
+export default async function ChaptersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    pending?: string;
+    approved?: string;
+    rejected?: string;
+  }>;
+}) {
   await requireRole("organizer");
 
-  const chapters = await db.chapter.findMany({
-    orderBy: { createdAt: "desc" },
-  });
+  const params = await searchParams;
 
-  const pending = chapters.filter((c) => c.status === ChapterStatus.PENDING);
-  const approved = chapters.filter((c) => c.status === ChapterStatus.APPROVED);
-  const rejected = chapters.filter((c) => c.status === ChapterStatus.REJECTED);
+  const [[pendingCount, approvedCount, rejectedCount], [pending, approved, rejected]] =
+    await Promise.all([
+      Promise.all([
+        db.chapter.count({ where: { status: ChapterStatus.PENDING } }),
+        db.chapter.count({ where: { status: ChapterStatus.APPROVED } }),
+        db.chapter.count({ where: { status: ChapterStatus.REJECTED } }),
+      ]),
+      Promise.all([
+        loadChapters(ChapterStatus.PENDING, parsePage(params.pending)),
+        loadChapters(ChapterStatus.APPROVED, parsePage(params.approved)),
+        loadChapters(ChapterStatus.REJECTED, parsePage(params.rejected)),
+      ]),
+    ]);
+
+  const sections = [
+    {
+      key: "pending",
+      title: "Pending approval",
+      count: pendingCount,
+      rows: pending,
+      page: parsePage(params.pending),
+    },
+    {
+      key: "approved",
+      title: "Approved",
+      count: approvedCount,
+      rows: approved,
+      page: parsePage(params.approved),
+    },
+    {
+      key: "rejected",
+      title: "Rejected",
+      count: rejectedCount,
+      rows: rejected,
+      page: parsePage(params.rejected),
+    },
+  ].map((s) => ({
+    ...s,
+    totalPages: pageCount(s.count),
+    page: clampPage(s.page, pageCount(s.count)),
+  }));
+
+  const anyChapters = sections.some((s) => s.count > 0);
 
   return (
     <div className="space-y-8">
@@ -130,7 +193,7 @@ export default async function ChaptersPage() {
         </p>
       </div>
 
-      {chapters.length === 0 ? (
+      {!anyChapters ? (
         <Card>
           <CardContent className="text-sm text-muted-foreground">
             No chapter registrations yet. Share the registration link with your
@@ -139,29 +202,24 @@ export default async function ChaptersPage() {
         </Card>
       ) : (
         <>
-          {pending.length > 0 ? (
-            <Section title="Pending approval" count={pending.length}>
-              {pending.map((c) => (
-                <ChapterCard key={c.id} chapter={c} />
-              ))}
-            </Section>
-          ) : null}
-
-          {approved.length > 0 ? (
-            <Section title="Approved" count={approved.length}>
-              {approved.map((c) => (
-                <ChapterCard key={c.id} chapter={c} />
-              ))}
-            </Section>
-          ) : null}
-
-          {rejected.length > 0 ? (
-            <Section title="Rejected" count={rejected.length}>
-              {rejected.map((c) => (
-                <ChapterCard key={c.id} chapter={c} />
-              ))}
-            </Section>
-          ) : null}
+          {sections.map((s) =>
+            s.count === 0 ? null : (
+              <Section
+                key={s.key}
+                title={s.title}
+                count={s.count}
+              >
+                {s.rows.map((c) => (
+                  <ChapterCard key={c.id} chapter={c} />
+                ))}
+                <Pagination
+                  page={s.page}
+                  totalPages={s.totalPages}
+                  buildHref={(page) => pageHref(params, s.key, page)}
+                />
+              </Section>
+            ),
+          )}
         </>
       )}
     </div>

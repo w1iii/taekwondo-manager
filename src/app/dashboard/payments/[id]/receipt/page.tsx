@@ -130,7 +130,7 @@ export default async function PaymentReceiptPage({
           Proof of payment
         </h2>
         <ProofView
-          proofUrl={payment.proofUrl}
+          paymentId={payment.id}
           referenceNo={payment.referenceNo}
           amount={formatPesos(payment.amountPesos)}
           status={payment.status}

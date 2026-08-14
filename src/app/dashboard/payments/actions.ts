@@ -56,7 +56,7 @@ export async function submitPayment(formData: FormData): Promise<PaymentFormStat
 
   let proofUrl: string;
   try {
-    proofUrl = await saveUpload(parsed.data.proof, "proofs");
+    proofUrl = await saveUpload(parsed.data.proof, "proofs", undefined, { private: true });
   } catch (error) {
     return {
       ok: false,

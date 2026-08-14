@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { isProvince } from "@/lib/provinces";
 import { requireUser } from "@/lib/auth";
 import { saveUpload } from "@/lib/uploads";
-import { ChapterStatus } from "@/generated/prisma/client";
+import { ChapterStatus, Prisma } from "@/generated/prisma/client";
 
 export type RegisterState = { ok: true } | { ok: false; error: string };
 
@@ -50,6 +50,17 @@ export async function registerChapter(
     return { ok: false, error: "Enter the head coach's full name." };
   }
 
+  const existing = await db.chapter.findFirst({
+    where: {
+      headCoachEmail,
+      status: { in: [ChapterStatus.PENDING, ChapterStatus.APPROVED] },
+    },
+    select: { id: true },
+  });
+  if (existing) {
+    return { ok: false, error: "This email already has an active chapter registration." };
+  }
+
   let logoUrl: string | null = null;
   if (logo instanceof File && logo.size > 0) {
     if (!logo.type.startsWith("image/")) {
@@ -82,8 +93,7 @@ export async function registerChapter(
       },
     });
   } catch (error) {
-    const isDuplicate = error instanceof Error && error.message.includes("Unique constraint");
-    if (isDuplicate) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return {
         ok: false,
         error: "This email already has an active chapter registration.",

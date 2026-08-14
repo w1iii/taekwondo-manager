@@ -9,45 +9,49 @@ Production-readiness work items from full-stack audit (2026-08-14).
 ## P0 — BLOCKERS (must fix before going live)
 
 ### P0-1 Connection pooling (crash risk at 100+ users)
-- [ ] Switch `DATABASE_URL` to Neon pooled endpoint (`-pooler` host) + `?pgbouncer=true`
-- [ ] Fix `src/lib/db.ts` — global cache currently only set in dev (`NODE_ENV !== "production"` guard). Always assign to global so prod gets one PrismaClient per instance.
-- [ ] Update `.env.example` comment (currently advises unpooled — backwards for serverless)
+- [x] Switch `DATABASE_URL` to Neon pooled endpoint (`-pooler` host) + `?pgbouncer=true`
+- [x] Fix `src/lib/db.ts` — global cache currently only set in dev (`NODE_ENV !== "production"` guard). Always assign to global so prod gets one PrismaClient per instance.
+- [x] Update `.env.example` comment (currently advises unpooled — backwards for serverless)
 - **Why:** unpooled endpoint caps connections (100 free tier). Each PrismaClient = pg pool (up to 10 conns). 10 serverless instances × 10 = exhaustion → 500s.
 - **Files:** `src/lib/db.ts`, `.env`, `.env.example`
 - **Effort:** ~30 min
 
 ### P0-2 Cloudinary must be guaranteed in prod (silent data loss risk)
-- [ ] Verify `CLOUDINARY_URL` set in production env
-- [ ] Make `saveUpload()` fail loudly (throw) when no Cloudinary AND no local fallback allowed — or add explicit `NODE_ENV=production` guard that forbids local `.uploads/` fallback
+- [x] Verify `CLOUDINARY_URL` set in production env
+- [x] Make `saveUpload()` fail loudly (throw) when no Cloudinary AND no local fallback allowed — or add explicit `NODE_ENV=production` guard that forbids local `.uploads/` fallback
 - **Why:** local `.uploads/` is ephemeral on serverless — files vanish on redeploy, `/uploads/[...path]` 404s. Payment proofs lost silently.
 - **Files:** `src/lib/uploads.ts`, `.env.local`
 - **Effort:** ~20 min
+- **Done:** local fallback now guarded by `ALLOW_LOCAL_UPLOADS` env (default: forbidden in `NODE_ENV=production`); `saveUpload` throws loud error otherwise.
 
 ### P0-3 Payment proofs are public (privacy/security)
-- [ ] Cloudinary: use signed URLs or private delivery for `proofs/` folder
-- [ ] Or serve proofs through an authenticated route (check chapter ownership before streaming)
+- [x] Cloudinary: use signed URLs or private delivery for `proofs/` folder
+- [x] Or serve proofs through an authenticated route (check chapter ownership before streaming)
 - **Why:** GCash screenshots = financial data. `secure_url` is public-by-URL.
 - **Files:** `src/lib/uploads.ts`, `src/app/dashboard/payments/[id]/page.tsx`, `src/app/admin/payments/[id]/page.tsx`
 - **Effort:** ~1–2 hr
+- **Done:** proofs uploaded as Cloudinary `private` type; rendered via authed `GET /api/payments/[id]/proof` that checks chapter ownership (coach: own chapter; organizer: any), streams bytes through a short-lived signed URL. `ProofView` now takes `paymentId`. Local dev files streamed from `.uploads`.
 
 ### P0-4 Unique constraint on Chapter.headCoachEmail
-- [ ] Add `@unique` to `Chapter.headCoachEmail` in `prisma/schema.prisma`
-- [ ] Migration + dedupe existing rows first
-- [ ] Fix `registerChapter` duplicate detection (currently catches a constraint error that can never fire → unlimited duplicate chapters per email)
+- [x] Add `@unique` to `Chapter.headCoachEmail` in `prisma/schema.prisma`
+- [x] Migration + dedupe existing rows first
+- [x] Fix `registerChapter` duplicate detection (currently catches a constraint error that can never fire → unlimited duplicate chapters per email)
 - **Files:** `prisma/schema.prisma`, `src/app/register-chapter/actions.ts`
 - **Effort:** ~1 hr
+- **Done (deviation):** a **partial** unique index on `(headCoachEmail) WHERE status IN ('PENDING','APPROVED')` already existed since migration `20260813173221` — it allows REJECTED rows to free the email for re-registration. A full `@unique` would break that flow, and Prisma can't express partial indexes in the schema, so no new constraint was added. Verified no duplicate emails in the live DB (6 chapters, 0 dupes). `registerChapter` now pre-checks for an active registration and catches `P2002` by code (robust vs string matching) as race protection. Schema documented.
 
 ---
 
 ## P1 — HIGH (fix soon after launch)
 
 ### P1-1 Pagination on unbounded admin queries
-- [ ] `admin/payments` — paginate `loadPayments()` (currently loads ALL payments)
-- [ ] `admin/chapters` — paginate chapter list
-- [ ] `admin/athletes` — paginate + limit (1000+ rows → huge HTML, slow TTFB)
-- [ ] Add trigram index (`pg_trgm`) on `Athlete.name` for `contains + insensitive` search (currently full scan)
+- [x] `admin/payments` — paginate `loadPayments()` (currently loads ALL payments)
+- [x] `admin/chapters` — paginate chapter list
+- [x] `admin/athletes` — paginate + limit (1000+ rows → huge HTML, slow TTFB)
+- [x] Add trigram index (`pg_trgm`) on `Athlete.name` for `contains + insensitive` search (currently full scan)
 - **Files:** `src/app/admin/payments/page.tsx`, `src/app/admin/chapters/page.tsx`, `src/app/admin/athletes/page.tsx`, `prisma/schema.prisma`
 - **Effort:** ~2–3 hr
+- **Done:** added shared `Pagination` component + `src/lib/pagination.ts` helpers; per-status pagination for payments/chapters (keys `pending`/`approved`/`rejected`), single `page` param for athletes preserving all filters; `pg_trgm` GIN index on `Athlete.name` (migration `20260814162848_add_athlete_trgm` with `CREATE EXTENSION IF NOT EXISTS pg_trgm`). PAGE_SIZE = 25.
 
 ### P1-2 Caching layer for hot reads
 - [ ] `unstable_cache` on: published events list, brackets cells, chapter lookup

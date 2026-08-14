@@ -56,7 +56,7 @@ export default async function PaymentProofCoachPage({
       </Card>
 
       <ProofView
-        proofUrl={payment.proofUrl}
+        paymentId={payment.id}
         referenceNo={payment.referenceNo}
         amount={formatPesos(payment.amountPesos)}
         status={payment.status}

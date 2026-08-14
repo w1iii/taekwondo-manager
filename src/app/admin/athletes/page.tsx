@@ -8,6 +8,15 @@ import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { GENDER_OPTIONS, genderLabel, beltLabel } from "@/lib/athletes";
 import { Gender } from "@/generated/prisma/client";
+import { Pagination } from "@/components/pagination";
+import {
+  PAGE_SIZE,
+  pageCount,
+  pageHref,
+  clampPage,
+  parsePage,
+} from "@/lib/pagination";
+
 
 export const metadata = { title: "Athletes" };
 
@@ -25,13 +34,17 @@ export default async function AthletesAdminPage({
     gender?: string;
     chapter?: string;
     division?: string;
+    page?: string;
   }>;
 }) {
   await requireRole("organizer");
 
-  const { q, gender, chapter, division } = await searchParams;
+  const { q, gender, chapter, division, page: pageParam } = await searchParams;
   const query = q?.trim() ?? "";
-  const genderFilter = gender === "MALE" || gender === "FEMALE" ? gender : undefined;
+  const genderFilter = (gender === "MALE" || gender === "FEMALE" ? gender : undefined) as
+    | "MALE"
+    | "FEMALE"
+    | undefined;
   const chapterFilter = chapter?.trim() || undefined;
   const divisionId = division?.trim() || undefined;
 
@@ -61,27 +74,37 @@ export default async function AthletesAdminPage({
     };
   }
 
-  const athletes = await db.athlete.findMany({
-    where: {
-      name: query ? { contains: query, mode: "insensitive" } : undefined,
-      gender: genderFilter,
-      chapterId: chapterFilter,
-      ...(divisionFilter
-        ? {
-            gender: divisionFilter.gender as "MALE" | "FEMALE",
-            birthYear: {
-              gte: divisionFilter.birthYearMin,
-              lte: divisionFilter.birthYearMax,
-            },
-            enrollments: {
-              some: { eventId: divisionFilter.eventId },
-            },
-          }
-        : {}),
-    },
-    include: { chapter: true },
-    orderBy: [{ chapter: { name: "asc" } }, { name: "asc" }],
-  });
+  const athletesWhere = {
+    name: query ? { contains: query, mode: "insensitive" as const } : undefined,
+    gender: genderFilter,
+    chapterId: chapterFilter,
+    ...(divisionFilter
+      ? {
+          gender: divisionFilter.gender as "MALE" | "FEMALE",
+          birthYear: {
+            gte: divisionFilter.birthYearMin,
+            lte: divisionFilter.birthYearMax,
+          },
+          enrollments: {
+            some: { eventId: divisionFilter.eventId },
+          },
+        }
+      : {}),
+  };
+
+  const requestedPage = parsePage(pageParam);
+  const [athletes, totalAthletes] = await Promise.all([
+    db.athlete.findMany({
+      where: athletesWhere,
+      include: { chapter: true },
+      orderBy: [{ chapter: { name: "asc" } }, { name: "asc" }],
+      skip: (requestedPage - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
+    db.athlete.count({ where: athletesWhere }),
+  ]);
+  const totalPages = pageCount(totalAthletes);
+  const athletesPage = clampPage(requestedPage, totalPages);
 
   const byChapter = new Map<string, (typeof athletes)[number][]>();
   for (const athlete of athletes) {
@@ -185,7 +208,7 @@ export default async function AthletesAdminPage({
       ) : (
         <div className="space-y-8">
           <p className="text-sm text-muted-foreground">
-            {athletes.length} athlete{athletes.length === 1 ? "" : "s"}
+            {totalAthletes} athlete{totalAthletes === 1 ? "" : "s"}
             {query ? ` matching “${query}”` : ""}
           </p>
           {groups.map(([chapterId, rows]) => (
@@ -222,6 +245,13 @@ export default async function AthletesAdminPage({
               </ul>
             </section>
           ))}
+          <Pagination
+            page={athletesPage}
+            totalPages={totalPages}
+            buildHref={(page) =>
+              pageHref({ q: q ?? "", gender, chapter, division }, "page", page)
+            }
+          />
         </div>
       )}
     </div>
