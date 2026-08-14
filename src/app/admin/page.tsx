@@ -1,18 +1,20 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { ChapterStatus } from "@/generated/prisma/client";
+import { ChapterStatus, EventStatus, PaymentStatus } from "@/generated/prisma/client";
 
 export const metadata = { title: "Organizer Overview" };
 
 export default async function AdminOverviewPage() {
   const user = await requireRole("organizer");
 
-  const [pendingChapters, approvedChapters, totalChapters] = await Promise.all([
-    db.chapter.count({ where: { status: ChapterStatus.PENDING } }),
-    db.chapter.count({ where: { status: ChapterStatus.APPROVED } }),
-    db.chapter.count(),
-  ]);
+  const [pendingChapters, approvedChapters, publishedEvents, pendingPayments] =
+    await Promise.all([
+      db.chapter.count({ where: { status: ChapterStatus.PENDING } }),
+      db.chapter.count({ where: { status: ChapterStatus.APPROVED } }),
+      db.event.count({ where: { status: EventStatus.PUBLISHED } }),
+      db.teamPayment.count({ where: { status: PaymentStatus.PENDING } }),
+    ]);
 
   return (
     <div className="space-y-6">
@@ -45,11 +47,20 @@ export default async function AdminOverviewPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>Total registrations</CardDescription>
-            <CardTitle className="text-lg">{totalChapters}</CardTitle>
+            <CardDescription>Published events</CardDescription>
+            <CardTitle className="text-lg">{publishedEvents}</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            All submitted chapter registrations.
+            Live for coach registration.
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Payments pending</CardDescription>
+            <CardTitle className="text-lg">{pendingPayments}</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            Waiting for your approval.
           </CardContent>
         </Card>
         <Card>

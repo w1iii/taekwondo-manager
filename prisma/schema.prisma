@@ -13,6 +13,121 @@ enum ChapterStatus {
   REJECTED
 }
 
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Event {
+  id                   String      @id @default(cuid())
+  name                 String
+  description          String?
+  location             String
+  eventDate            DateTime
+  registrationDeadline DateTime
+  entryFeePesos        Int          @default(500)
+  status               EventStatus  @default(DRAFT)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  enrollments          Enrollment[]
+  payments             TeamPayment[]
+  divisions            Division[]
+
+  @@index([status])
+  @@index([eventDate])
+}
+
+model Athlete {
+  id          String       @id @default(cuid())
+  chapterId   String
+  name        String
+  gender      Gender
+  birthYear   Int
+  weightKg    Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  chapter     Chapter      @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  enrollments Enrollment[]
+  bracketCells BracketCell[]
+
+  @@index([chapterId])
+  @@index([chapterId, gender])
+}
+
+model Enrollment {
+  id        String   @id @default(cuid())
+  eventId   String
+  athleteId String
+  chapterId String
+  createdAt DateTime @default(now())
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  athlete   Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, athleteId])
+  @@index([eventId])
+  @@index([chapterId])
+  @@index([athleteId])
+}
+
+model TeamPayment {
+  id              String        @id @default(cuid())
+  eventId         String
+  chapterId       String
+  amountPesos     Int
+  referenceNo     String
+  proofUrl        String
+  status          PaymentStatus @default(PENDING)
+  rejectionReason String?
+  submittedAt     DateTime      @default(now())
+  reviewedAt      DateTime?
+  event           Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  chapter         Chapter       @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, chapterId])
+  @@index([status])
+}
+
+model Division {
+  id        String   @id @default(cuid())
+  eventId   String
+  name      String
+  gender    Gender
+  minAge    Int
+  maxAge    Int
+  createdAt DateTime @default(now())
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  brackets  BracketCell[]
+
+  @@unique([eventId, name])
+}
+
+model BracketCell {
+  id              String   @id @default(cuid())
+  divisionId      String
+  round           Int
+  position        Int
+  athleteId       String?
+  childAId        String?
+  childBId        String?
+  winnerAthleteId String?
+  division        Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  athlete         Athlete? @relation(fields: [athleteId], references: [id], onDelete: SetNull)
+
+  @@index([divisionId, round, position])
+}
+
 model Chapter {
   id              String        @id @default(cuid())
   name            String
@@ -27,6 +142,9 @@ model Chapter {
   headCoachUserId String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+  athletes        Athlete[]
+  enrollments     Enrollment[]
+  payments        TeamPayment[]
 
   @@index([status])
   @@index([province])
