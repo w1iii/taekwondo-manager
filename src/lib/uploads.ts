@@ -2,11 +2,31 @@ import "server-only";
 
 import { mkdir, rm, writeFile } from "fs/promises";
 import path from "path";
-import { del, put } from "@vercel/blob";
+import { v2 as cloudinary } from "cloudinary";
 
 export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
 export class UploadError extends Error {}
+
+function hasCloudinary(): boolean {
+  return Boolean(process.env.CLOUDINARY_URL);
+}
+
+function publicIdFromUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.hostname.endsWith("res.cloudinary.com")) return null;
+    const segments = parsed.pathname.split("/");
+    const versionIndex = segments.findIndex((s) => /^v\d+$/.test(s));
+    if (versionIndex === -1) return null;
+    return segments
+      .slice(versionIndex + 1)
+      .join("/")
+      .replace(/\.[a-z0-9]+$/i, "");
+  } catch {
+    return null;
+  }
+}
 
 export async function saveUpload(
   file: File,
@@ -23,28 +43,37 @@ export async function saveUpload(
     throw new UploadError(`File must be ${Math.round(maxBytes / 1_048_576)} MB or smaller.`);
   }
 
-  const ext = file.name.split(".").pop()?.toLowerCase() || "png";
-  const filename = `${crypto.randomUUID()}.${ext}`;
+  const filename = `${crypto.randomUUID()}`;
 
-  if (process.env.VERCEL_BLOB_READ_WRITE_TOKEN) {
-    const blob = await put(`${folder}/${filename}`, file, { access: "public" });
-    return blob.url;
+  if (hasCloudinary()) {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const dataUri = `data:${file.type};base64,${buffer.toString("base64")}`;
+    const result = await cloudinary.uploader.upload(dataUri, {
+      folder,
+      public_id: filename,
+      resource_type: "image",
+    });
+    return result.secure_url;
   }
 
+  const ext = file.name.split(".").pop()?.toLowerCase() || "png";
   const dir = path.join(process.cwd(), ".uploads", folder);
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, filename), Buffer.from(await file.arrayBuffer()));
-  return `/uploads/${folder}/${filename}`;
+  await writeFile(path.join(dir, `${filename}.${ext}`), Buffer.from(await file.arrayBuffer()));
+  return `/uploads/${folder}/${filename}.${ext}`;
 }
 
 export async function deleteUpload(url: string): Promise<void> {
   if (!url) return;
 
-  if (url.startsWith("http")) {
-    await del(url);
+  if (url.startsWith("/uploads/")) {
+    const rel = url.replace(/^\/uploads\//, "");
+    await rm(path.join(process.cwd(), ".uploads", rel), { force: true });
     return;
   }
 
-  const rel = url.replace(/^\/uploads\//, "");
-  await rm(path.join(process.cwd(), ".uploads", rel), { force: true });
+  const publicId = publicIdFromUrl(url);
+  if (publicId) {
+    await cloudinary.uploader.destroy(publicId);
+  }
 }

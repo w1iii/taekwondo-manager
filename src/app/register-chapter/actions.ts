@@ -1,10 +1,9 @@
 "use server";
 
-import { put } from "@vercel/blob";
-
 import { db } from "@/lib/db";
 import { isProvince } from "@/lib/provinces";
 import { requireUser } from "@/lib/auth";
+import { saveUpload } from "@/lib/uploads";
 import { ChapterStatus } from "@/generated/prisma/client";
 
 export type RegisterState = { ok: true } | { ok: false; error: string };
@@ -59,12 +58,13 @@ export async function registerChapter(
     if (logo.size > MAX_LOGO_BYTES) {
       return { ok: false, error: "Logo must be 15 MB or smaller." };
     }
-    if (process.env.VERCEL_BLOB_READ_WRITE_TOKEN) {
-      const ext = logo.name.split(".").pop()?.toLowerCase() ?? "png";
-      const blob = await put(`chapters/${crypto.randomUUID()}.${ext}`, logo, {
-        access: "public",
-      });
-      logoUrl = blob.url;
+    try {
+      logoUrl = await saveUpload(logo, "chapters");
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "Logo upload failed.",
+      };
     }
   }
 
