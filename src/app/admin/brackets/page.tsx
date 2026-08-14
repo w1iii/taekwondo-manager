@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CalendarDays, Users } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -15,7 +16,7 @@ import {
   type Division,
 } from "@/generated/prisma/client";
 import { ActionButton } from "@/components/action-button";
-import { generateBracket, generateDivisions, resetBracket } from "./actions";
+import { generateDivisions } from "./actions";
 
 export const metadata = { title: "Brackets" };
 
@@ -178,26 +179,14 @@ function EventSection({
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {hasBracket ? (
-                    <Button
-                      render={<Link href={`/admin/brackets/${division.id}`} />}
-                      size="sm"
-                    >
-                      View bracket
-                    </Button>
-                  ) : (
-                    <form action={generateBracket}>
-                      <input type="hidden" name="divisionId" value={division.id} />
-                      <ActionButton label="Generate bracket" />
-                    </form>
-                  )}
-                  <form action={resetBracket}>
-                    <input type="hidden" name="divisionId" value={division.id} />
-                    <ActionButton
-                      label="Reset"
-                      variant="outline"
-                      pendingLabel="Clearing…"
-                    />
-                  </form>
+                    <Badge variant="secondary">Bracket ready</Badge>
+                  ) : null}
+                  <Button
+                    render={<Link href={`/admin/brackets/${division.id}`} />}
+                    size="sm"
+                  >
+                    View
+                  </Button>
                 </div>
               </li>
             );

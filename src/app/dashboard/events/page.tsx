@@ -60,39 +60,49 @@ export default async function EventsCoachPage() {
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2">
           {upcoming.map((event) => (
-            <li key={event.id} className="rounded-lg border bg-card p-4">
-              <p className="font-medium">{event.name}</p>
-              <div className="mt-1 space-y-1 text-sm text-muted-foreground">
-                <p className="flex items-center gap-2">
-                  <CalendarDays className="size-4" />
-                  {formatDate(event.eventDate)}
+            <li key={event.id} className="overflow-hidden rounded-lg border bg-card">
+              {event.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- local uploads need the session cookie
+                <img
+                  src={event.imageUrl}
+                  alt={event.name}
+                  className="h-28 w-full object-cover"
+                />
+              ) : null}
+              <div className="p-4">
+                <p className="font-medium">{event.name}</p>
+                <div className="mt-1 space-y-1 text-sm text-muted-foreground">
+                  <p className="flex items-center gap-2">
+                    <CalendarDays className="size-4" />
+                    {formatDate(event.eventDate)}
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <MapPin className="size-4" />
+                    {event.location}
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <Tag className="size-4" />
+                    {formatPesos(event.entryFeePesos)} per athlete
+                  </p>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Registration closes {formatDeadline(event.registrationDeadline)}
                 </p>
-                <p className="flex items-center gap-2">
-                  <MapPin className="size-4" />
-                  {event.location}
-                </p>
-                <p className="flex items-center gap-2">
-                  <Tag className="size-4" />
-                  {formatPesos(event.entryFeePesos)} per athlete
-                </p>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Registration closes {formatDeadline(event.registrationDeadline)}
-              </p>
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs text-muted-foreground">
-                  {enrolledMap.get(event.id) ?? 0} registered from your chapter
-                </p>
-                {isRegistrationOpen(event.registrationDeadline) ? (
-                  <Button
-                    render={<Link href={`/dashboard/events/${event.id}`} />}
-                    size="sm"
-                  >
-                    Register
-                  </Button>
-                ) : (
-                  <span className="text-xs text-muted-foreground">Registration closed</span>
-                )}
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs text-muted-foreground">
+                    {enrolledMap.get(event.id) ?? 0} registered from your chapter
+                  </p>
+                  {isRegistrationOpen(event.registrationDeadline) ? (
+                    <Button
+                      render={<Link href={`/dashboard/events/${event.id}`} />}
+                      size="sm"
+                    >
+                      Register
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Registration closed</span>
+                  )}
+                </div>
               </div>
             </li>
           ))}
