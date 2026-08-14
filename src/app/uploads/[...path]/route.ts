@@ -1,6 +1,5 @@
 import { readFile } from "fs/promises";
 import path from "path";
-import { requireUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,14 +10,19 @@ const MIME: Record<string, string> = {
   gif: "image/gif",
   webp: "image/webp",
   avif: "image/avif",
+  svg: "image/svg+xml",
+  bmp: "image/bmp",
+  ico: "image/x-icon",
+  tiff: "image/tiff",
+  tif: "image/tiff",
+  heic: "image/heic",
+  heif: "image/heif",
 };
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
-  await requireUser();
-
   const { path: segments } = await params;
   if (segments.some((s) => s.includes("..") || s.length === 0)) {
     return new Response("Not found", { status: 404 });

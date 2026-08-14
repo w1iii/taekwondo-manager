@@ -7,7 +7,7 @@ import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { parseEventFormData, type EventFormState } from "@/lib/events";
 import { deleteUpload, saveUpload, UploadError } from "@/lib/uploads";
-import { EventStatus } from "@/generated/prisma/client";
+import { EventStatus, type Prisma } from "@/generated/prisma/client";
 
 async function parseImage(formData: FormData): Promise<string | null | { error: string }> {
   const image = formData.get("image");
@@ -28,12 +28,14 @@ export async function createEvent(formData: FormData): Promise<EventFormState> {
   const parsed = parseEventFormData(formData);
   if (!parsed.ok) return { ok: false, error: parsed.error };
 
-  const imageUrl = await parseImage(formData);
-  if (typeof imageUrl !== "string") {
-    return { ok: false, error: imageUrl?.error ?? "Image upload failed." };
+  const imageResult = await parseImage(formData);
+  if (imageResult && typeof imageResult !== "string") {
+    return { ok: false, error: imageResult.error };
   }
 
-  await db.event.create({ data: { ...parsed.data, imageUrl } });
+  await db.event.create({
+    data: { ...parsed.data, imageUrl: typeof imageResult === "string" ? imageResult : null },
+  });
 
   revalidatePath("/admin/events");
   revalidatePath("/admin");
@@ -49,17 +51,28 @@ export async function updateEvent(formData: FormData): Promise<EventFormState> {
   const parsed = parseEventFormData(formData);
   if (!parsed.ok) return { ok: false, error: parsed.error };
 
-  const imageUrl = await parseImage(formData);
-  if (typeof imageUrl !== "string") {
-    return { ok: false, error: imageUrl?.error ?? "Image upload failed." };
+  const imageResult = await parseImage(formData);
+  if (imageResult && typeof imageResult !== "string") {
+    return { ok: false, error: imageResult.error };
   }
 
-  if (imageUrl) {
+  const data: Prisma.EventUpdateInput = {
+    name: parsed.data.name,
+    description: parsed.data.description,
+    location: parsed.data.location,
+    eventDate: parsed.data.eventDate,
+    registrationDeadline: parsed.data.registrationDeadline,
+    entryFeePesos: parsed.data.entryFeePesos,
+  };
+
+  // No new file picked → keep the existing image. Only replace when a new one is uploaded.
+  if (typeof imageResult === "string") {
     const existing = await db.event.findUnique({ where: { id }, select: { imageUrl: true } });
     if (existing?.imageUrl) await deleteUpload(existing.imageUrl);
+    data.imageUrl = imageResult;
   }
 
-  await db.event.update({ where: { id }, data: { ...parsed.data, imageUrl } });
+  await db.event.update({ where: { id }, data });
 
   revalidatePath("/admin/events");
   revalidatePath("/admin");

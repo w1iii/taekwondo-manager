@@ -9,12 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   DEFAULT_ENTRY_FEE_PESOS,
+  MAX_EVENT_IMAGE_BYTES,
   dateInputValue,
   datetimeLocalInputValue,
   type EventFormState,
 } from "@/lib/events";
 
 const initialState: EventFormState = { ok: false, error: "" };
+
+const MAX_IMAGE_MB = Math.round(MAX_EVENT_IMAGE_BYTES / 1_048_576);
 
 export type EventFormValues = {
   id?: string;
@@ -35,13 +38,33 @@ export function EventForm({
   values?: EventFormValues;
 }) {
   const [state, formAction, pending] = useActionState(
-    (_prev: EventFormState, formData: FormData) => action(formData),
+    async (_prev: EventFormState, formData: FormData) => {
+      try {
+        return await action(formData);
+      } catch {
+        // Next.js throws before the action runs when the request body exceeds
+        // serverActions.bodySizeLimit (e.g. oversized image). Surface it as a
+        // form error instead of an unhandled rejection.
+        return {
+          ok: false,
+          error: `Image exceeds the maximum size (${MAX_IMAGE_MB} MB).`,
+        };
+      }
+    },
     initialState,
   );
   const [preview, setPreview] = useState<string | null>(values?.imageUrl ?? null);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   function onImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    if (file && file.size > MAX_EVENT_IMAGE_BYTES) {
+      setImageError(`Image exceeds the maximum size (${MAX_IMAGE_MB} MB).`);
+      setPreview(values?.imageUrl ?? null);
+      e.target.value = "";
+      return;
+    }
+    setImageError(null);
     setPreview(file ? URL.createObjectURL(file) : (values?.imageUrl ?? null));
   }
 
@@ -84,7 +107,7 @@ export function EventForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="image">Event image (optional, 2 MB max)</Label>
+        <Label htmlFor="image">Event image (optional, {MAX_IMAGE_MB} MB max)</Label>
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element -- local uploads need the session cookie
           <img
@@ -94,6 +117,11 @@ export function EventForm({
           />
         ) : null}
         <Input id="image" name="image" type="file" accept="image/*" onChange={onImageChange} />
+        {imageError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {imageError}
+          </p>
+        ) : null}
         <p className="flex items-center gap-1 text-xs text-muted-foreground">
           <ImagePlus className="size-3.5" />
           Picking a new file replaces the current image.
