@@ -93,7 +93,7 @@ export function RegisterChapterForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="logo">Chapter logo (optional, 2 MB max)</Label>
+        <Label htmlFor="logo">Chapter logo (optional, 15 MB max)</Label>
         <Input id="logo" name="logo" type="file" accept="image/*" />
       </div>
 

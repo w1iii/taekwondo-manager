@@ -63,7 +63,7 @@ export function PaymentForm({
           onChange={(e) => setFileName(e.target.files?.[0]?.name ?? "")}
         />
         <p className="text-xs text-muted-foreground">
-          {fileName || "Screenshot of your GCash transfer. 2 MB max."}
+          {fileName || "Screenshot of your GCash transfer. 15 MB max."}
         </p>
       </div>
 

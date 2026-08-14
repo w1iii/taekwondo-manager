@@ -9,7 +9,7 @@ import { ChapterStatus } from "@/generated/prisma/client";
 
 export type RegisterState = { ok: true } | { ok: false; error: string };
 
-const MAX_LOGO_BYTES = 2 * 1024 * 1024;
+const MAX_LOGO_BYTES = 15 * 1024 * 1024;
 
 function normalizeGcash(value: string): string | null {
   const digits = value.replace(/\D/g, "");
@@ -57,7 +57,7 @@ export async function registerChapter(
       return { ok: false, error: "The logo must be an image file." };
     }
     if (logo.size > MAX_LOGO_BYTES) {
-      return { ok: false, error: "Logo must be 2 MB or smaller." };
+      return { ok: false, error: "Logo must be 15 MB or smaller." };
     }
     if (process.env.VERCEL_BLOB_READ_WRITE_TOKEN) {
       const ext = logo.name.split(".").pop()?.toLowerCase() ?? "png";

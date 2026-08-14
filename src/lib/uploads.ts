@@ -4,7 +4,7 @@ import { mkdir, rm, writeFile } from "fs/promises";
 import path from "path";
 import { del, put } from "@vercel/blob";
 
-export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
 export class UploadError extends Error {}
 

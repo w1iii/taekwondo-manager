@@ -1,7 +1,7 @@
 export const DEFAULT_ENTRY_FEE_PESOS = 500;
 
-// Must stay <= Next.js serverActions.bodySizeLimit (6 mb) minus multipart overhead.
-export const MAX_EVENT_IMAGE_BYTES = 5 * 1024 * 1024;
+// Must stay <= Next.js serverActions.bodySizeLimit (16 mb) minus multipart overhead.
+export const MAX_EVENT_IMAGE_BYTES = 15 * 1024 * 1024;
 
 export function formatPesos(amount: number): string {
   return `₱${amount.toLocaleString("en-PH")}`;

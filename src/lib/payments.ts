@@ -1,4 +1,4 @@
-export const MAX_PROOF_BYTES = 2 * 1024 * 1024;
+export const MAX_PROOF_BYTES = 15 * 1024 * 1024;
 
 export type BadgeVariant = "default" | "secondary" | "destructive";
 
@@ -43,7 +43,7 @@ export function parsePaymentFormData(formData: FormData): ParsedPaymentForm {
     return { ok: false, error: "Proof of payment must be an image." };
   }
   if (proof.size > MAX_PROOF_BYTES) {
-    return { ok: false, error: "Proof must be 2 MB or smaller." };
+    return { ok: false, error: "Proof must be 15 MB or smaller." };
   }
 
   return { ok: true, data: { referenceNo, proof } };
