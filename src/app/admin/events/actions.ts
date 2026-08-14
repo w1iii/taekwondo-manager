@@ -6,7 +6,21 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { parseEventFormData, type EventFormState } from "@/lib/events";
+import { deleteUpload, saveUpload, UploadError } from "@/lib/uploads";
 import { EventStatus } from "@/generated/prisma/client";
+
+async function parseImage(formData: FormData): Promise<string | null | { error: string }> {
+  const image = formData.get("image");
+  if (!(image instanceof File) || image.size === 0) return null;
+
+  try {
+    return await saveUpload(image, "events");
+  } catch (error) {
+    return {
+      error: error instanceof UploadError ? error.message : "Image upload failed.",
+    };
+  }
+}
 
 export async function createEvent(formData: FormData): Promise<EventFormState> {
   await requireRole("organizer");
@@ -14,7 +28,12 @@ export async function createEvent(formData: FormData): Promise<EventFormState> {
   const parsed = parseEventFormData(formData);
   if (!parsed.ok) return { ok: false, error: parsed.error };
 
-  await db.event.create({ data: parsed.data });
+  const imageUrl = await parseImage(formData);
+  if (typeof imageUrl !== "string") {
+    return { ok: false, error: imageUrl?.error ?? "Image upload failed." };
+  }
+
+  await db.event.create({ data: { ...parsed.data, imageUrl } });
 
   revalidatePath("/admin/events");
   revalidatePath("/admin");
@@ -30,7 +49,17 @@ export async function updateEvent(formData: FormData): Promise<EventFormState> {
   const parsed = parseEventFormData(formData);
   if (!parsed.ok) return { ok: false, error: parsed.error };
 
-  await db.event.update({ where: { id }, data: parsed.data });
+  const imageUrl = await parseImage(formData);
+  if (typeof imageUrl !== "string") {
+    return { ok: false, error: imageUrl?.error ?? "Image upload failed." };
+  }
+
+  if (imageUrl) {
+    const existing = await db.event.findUnique({ where: { id }, select: { imageUrl: true } });
+    if (existing?.imageUrl) await deleteUpload(existing.imageUrl);
+  }
+
+  await db.event.update({ where: { id }, data: { ...parsed.data, imageUrl } });
 
   revalidatePath("/admin/events");
   revalidatePath("/admin");
@@ -43,7 +72,9 @@ export async function deleteEvent(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
 
+  const event = await db.event.findUnique({ where: { id }, select: { imageUrl: true } });
   await db.event.delete({ where: { id } });
+  if (event?.imageUrl) await deleteUpload(event.imageUrl);
 
   revalidatePath("/admin/events");
   revalidatePath("/admin");

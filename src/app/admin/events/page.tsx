@@ -24,6 +24,14 @@ function EventCard({ event }: { event: Event & { _count: { enrollments: number }
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-start">
+        {event.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- local uploads need the session cookie
+          <img
+            src={event.imageUrl}
+            alt={event.name}
+            className="h-28 w-full shrink-0 rounded-lg border object-cover bg-muted/40 sm:h-24 sm:w-36"
+          />
+        ) : null}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-base font-semibold">{event.name}</h2>

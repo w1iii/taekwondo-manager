@@ -1,8 +1,8 @@
 import "server-only";
 
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir, rm, writeFile } from "fs/promises";
 import path from "path";
-import { put } from "@vercel/blob";
+import { del, put } from "@vercel/blob";
 
 export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 
@@ -35,4 +35,16 @@ export async function saveUpload(
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, filename), Buffer.from(await file.arrayBuffer()));
   return `/uploads/${folder}/${filename}`;
+}
+
+export async function deleteUpload(url: string): Promise<void> {
+  if (!url) return;
+
+  if (url.startsWith("http")) {
+    await del(url);
+    return;
+  }
+
+  const rel = url.replace(/^\/uploads\//, "");
+  await rm(path.join(process.cwd(), ".uploads", rel), { force: true });
 }

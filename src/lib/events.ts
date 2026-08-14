@@ -40,6 +40,7 @@ export type EventFormData = {
   name: string;
   description: string | null;
   location: string;
+  imageUrl: string | null;
   eventDate: Date;
   registrationDeadline: Date;
   entryFeePesos: number;
@@ -89,6 +90,7 @@ export function parseEventFormData(formData: FormData): ParsedEventForm {
       name,
       description,
       location,
+      imageUrl: null,
       eventDate,
       registrationDeadline,
       entryFeePesos,

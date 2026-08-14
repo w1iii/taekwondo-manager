@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useActionState } from "react";
-import { Loader2 } from "lucide-react";
+import { ImagePlus, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ export type EventFormValues = {
   name: string;
   description: string | null;
   location: string;
+  imageUrl: string | null;
   eventDate: Date;
   registrationDeadline: Date;
   entryFeePesos: number;
@@ -36,6 +38,12 @@ export function EventForm({
     (_prev: EventFormState, formData: FormData) => action(formData),
     initialState,
   );
+  const [preview, setPreview] = useState<string | null>(values?.imageUrl ?? null);
+
+  function onImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    setPreview(file ? URL.createObjectURL(file) : (values?.imageUrl ?? null));
+  }
 
   return (
     <form action={formAction} className="space-y-4">
@@ -73,6 +81,23 @@ export function EventForm({
           defaultValue={values?.location}
           required
         />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="image">Event image (optional, 2 MB max)</Label>
+        {preview ? (
+          // eslint-disable-next-line @next/next/no-img-element -- local uploads need the session cookie
+          <img
+            src={preview}
+            alt="Event image preview"
+            className="h-40 w-full rounded-lg border object-cover bg-muted/40"
+          />
+        ) : null}
+        <Input id="image" name="image" type="file" accept="image/*" onChange={onImageChange} />
+        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+          <ImagePlus className="size-3.5" />
+          Picking a new file replaces the current image.
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

@@ -67,6 +67,14 @@ export default async function EventRegisterPage({
 
       <Card>
         <CardContent className="space-y-1 text-sm">
+          {event.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- local uploads need the session cookie
+            <img
+              src={event.imageUrl}
+              alt={event.name}
+              className="mb-2 h-48 w-full rounded-lg border object-cover bg-muted/40"
+            />
+          ) : null}
           <p className="flex items-center gap-2">
             <CalendarDays className="size-4" />
             {formatDate(event.eventDate)}

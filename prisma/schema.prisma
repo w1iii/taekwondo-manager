@@ -55,6 +55,7 @@ model Event {
   name                 String
   description          String?
   location             String
+  imageUrl             String?
   eventDate            DateTime
   registrationDeadline DateTime
   entryFeePesos        Int          @default(500)
