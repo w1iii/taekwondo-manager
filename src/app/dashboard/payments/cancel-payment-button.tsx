@@ -42,12 +42,16 @@ export function CancelPaymentButton({
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen && state.ok) {
-      setReason("");
-      router.refresh();
-    }
     setOpen(nextOpen);
+    if (!nextOpen) {
+      setReason("");
+    }
   };
+
+  if (state.ok && open) {
+    setOpen(false);
+    router.refresh();
+  }
 
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
