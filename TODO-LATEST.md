@@ -120,10 +120,11 @@ Production-readiness work items from full-stack audit (2026-08-14).
 - **Done:** claim now uses `updateMany({ where: { id, headCoachUserId: null } })` and only writes Clerk metadata when `count === 1` — a concurrent dashboard visit or second device can't double-claim or clobber another coach's link.
 
 ### P2-5 Tests
-- [ ] Unit: `bracket-core`, `division-core`, form parsers
+- [x] Unit: `bracket-core`, `division-core`, form parsers
 - [ ] Integration: server actions (enroll, payment, bracket gen)
 - [ ] E2E: coach flow (register → enroll → pay → view bracket)
 - **Effort:** ~1–2 days
+- **Done (unit tier):** vitest 3 + `vitest.config.ts` (node env, `@/` alias), `npm test`. 68 tests across 5 files — `bracket-core` (layout, tree gen, bye resolution, participants/champions), `division-core` (age/weight bounds, `buildDivisions` grouping, `athletesInDivision`), and form parsers (`payments`, `events`, `athletes`) covering happy path + every rejection branch. Integration + E2E remain TODO — they need a seeded test DB and browser/Clerk test mode.
 
 ---
 
@@ -162,6 +163,6 @@ Phase 3 (week 2):         P1-3 → P1-6 → P2-1 → P2-2
 Phase 4 (week 3+):        P2-3 → P2-4 → P2-5 → P3-*
 ```
 
-**Done:** P0 all · P1 all · P2-1, P2-2, P2-3, P2-4 (2026-08-15). Remaining: P2-5 tests, P3-* backlog.
+**Done:** P0 all · P1 all · P2-1…P2-4 (2026-08-15) · P2-5 unit tier (2026-08-15). Remaining: P2-5 integration + E2E, P3-* backlog.
 
 Say **"implement P0"** / **"implement P1"** / etc. and I'll start on that section.

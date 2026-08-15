@@ -23,7 +23,7 @@ export function formatDeadline(date: Date): string {
 }
 
 export function isEventUpcoming(date: Date): boolean {
-  return date.getTime() >= Date.now();
+  return new Date(date).getTime() >= Date.now();
 }
 
 export function isRegistrationOpen(deadline: Date): boolean {
