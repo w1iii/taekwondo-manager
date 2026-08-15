@@ -7,35 +7,36 @@ export function formatPesos(amount: number): string {
   return `₱${amount.toLocaleString("en-PH")}`;
 }
 
-export function formatDate(date: Date): string {
+export function formatDate(date: Date | string | number): string {
   return new Intl.DateTimeFormat("en-PH", {
     timeZone: "Asia/Manila",
     dateStyle: "medium",
-  }).format(date);
+  }).format(new Date(date));
 }
 
-export function formatDeadline(date: Date): string {
+export function formatDeadline(date: Date | string | number): string {
   return new Intl.DateTimeFormat("en-PH", {
     timeZone: "Asia/Manila",
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(date);
+  }).format(new Date(date));
 }
 
-export function isEventUpcoming(date: Date): boolean {
+export function isEventUpcoming(date: Date | string | number): boolean {
   return new Date(date).getTime() >= Date.now();
 }
 
-export function isRegistrationOpen(deadline: Date): boolean {
-  return new Date().getTime() <= deadline.getTime();
+export function isRegistrationOpen(deadline: Date | string | number): boolean {
+  return new Date().getTime() <= new Date(deadline).getTime();
 }
 
-export function dateInputValue(date: Date): string {
-  return date.toISOString().slice(0, 10);
+export function dateInputValue(date: Date | string | number): string {
+  return new Date(date).toISOString().slice(0, 10);
 }
 
-export function datetimeLocalInputValue(date: Date): string {
-  const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+export function datetimeLocalInputValue(date: Date | string | number): string {
+  const d = new Date(date);
+  const shifted = new Date(d.getTime() - d.getTimezoneOffset() * 60_000);
   return shifted.toISOString().slice(0, 16);
 }
 
