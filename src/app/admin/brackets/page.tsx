@@ -17,7 +17,7 @@ async function getAdminBracketsEvents() {
     where: { status: EventStatus.PUBLISHED },
     include: {
       divisions: true,
-      enrollments: { include: { athlete: true } },
+      _count: { select: { enrollments: true } },
     },
     orderBy: { eventDate: "desc" },
   });
@@ -69,8 +69,8 @@ export default async function BracketsAdminPage() {
                     <CalendarDays className="mr-1 inline size-3.5" />
                     {formatDate(event.eventDate)} ·{" "}
                     <Users className="mr-1 inline size-3.5" />
-                    {event.enrollments.length} athlete
-                    {event.enrollments.length === 1 ? "" : "s"} ·{" "}
+                    {event._count.enrollments} athlete
+                    {event._count.enrollments === 1 ? "" : "s"} ·{" "}
                     {event.divisions.length} division
                     {event.divisions.length === 1 ? "" : "s"}
                   </p>

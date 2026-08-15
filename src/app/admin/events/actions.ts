@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { reportError } from "@/lib/log";
 import { parseEventFormData, type EventFormState } from "@/lib/events";
 import { deleteUpload, saveUpload, UploadError } from "@/lib/uploads";
 import { EventStatus, type Prisma } from "@/generated/prisma/client";
@@ -33,9 +34,14 @@ export async function createEvent(formData: FormData): Promise<EventFormState> {
     return { ok: false, error: imageResult.error };
   }
 
-  await db.event.create({
-    data: { ...parsed.data, imageUrl: typeof imageResult === "string" ? imageResult : null },
-  });
+  try {
+    await db.event.create({
+      data: { ...parsed.data, imageUrl: typeof imageResult === "string" ? imageResult : null },
+    });
+  } catch (error) {
+    reportError("create-event-failed", { actorId: (await requireRole("organizer")).userId }, error);
+    return { ok: false, error: "Failed to create event. Please try again." };
+  }
 
   revalidateTag("events-published", "max");
   revalidatePath("/admin/events");
@@ -73,7 +79,12 @@ export async function updateEvent(formData: FormData): Promise<EventFormState> {
     data.imageUrl = imageResult;
   }
 
-  await db.event.update({ where: { id }, data });
+  try {
+    await db.event.update({ where: { id }, data });
+  } catch (error) {
+    reportError("update-event-failed", { eventId: id, actorId: (await requireRole("organizer")).userId }, error);
+    return { ok: false, error: "Failed to update event. Please try again." };
+  }
 
   revalidateTag("events-published", "max");
   revalidatePath("/admin/events");
@@ -87,9 +98,14 @@ export async function deleteEvent(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
 
-  const event = await db.event.findUnique({ where: { id }, select: { imageUrl: true } });
-  await db.event.delete({ where: { id } });
-  if (event?.imageUrl) await deleteUpload(event.imageUrl);
+  try {
+    const event = await db.event.findUnique({ where: { id }, select: { imageUrl: true } });
+    await db.event.delete({ where: { id } });
+    if (event?.imageUrl) await deleteUpload(event.imageUrl);
+  } catch (error) {
+    reportError("delete-event-failed", { eventId: id }, error);
+    return;
+  }
 
   revalidateTag("events-published", "max");
   revalidatePath("/admin/events");
@@ -107,20 +123,25 @@ export async function setEventStatus(formData: FormData): Promise<void> {
     return;
   }
 
-  const event = await db.event.update({
-    where: { id },
-    data: { status: rawStatus },
-  });
+  try {
+    const event = await db.event.update({
+      where: { id },
+      data: { status: rawStatus },
+    });
 
-  if (rawStatus === EventStatus.PUBLISHED) {
-    // Fan out one row per approved chapter with a single INSERT...SELECT —
-    // no in-memory chapter list, and it stays O(1) client-side work even at
-    // thousands of coaches.
-    await db.$executeRaw`
-      INSERT INTO "Notification" ("id", "role", "targetChapterId", "title", "body", "link", "createdAt")
-      SELECT gen_random_uuid(), 'COACH', "id", 'Registration open', ${`${event.name} is accepting registrations.`}, '/dashboard/events', now()
-      FROM "Chapter" WHERE "status" = 'APPROVED'
-    `;
+    if (rawStatus === EventStatus.PUBLISHED) {
+      // Fan out one row per approved chapter with a single INSERT...SELECT —
+      // no in-memory chapter list, and it stays O(1) client-side work even at
+      // thousands of coaches.
+      await db.$executeRaw`
+        INSERT INTO "Notification" ("id", "role", "targetChapterId", "title", "body", "link", "createdAt")
+        SELECT gen_random_uuid(), 'COACH', "id", 'Registration open', ${`${event.name} is accepting registrations.`}, '/dashboard/events', now()
+        FROM "Chapter" WHERE "status" = 'APPROVED'
+      `;
+    }
+  } catch (error) {
+    reportError("set-event-status-failed", { eventId: id, status: rawStatus }, error);
+    return;
   }
 
   revalidateTag("events-published", "max");

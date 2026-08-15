@@ -30,13 +30,17 @@ export async function approvePayment(formData: FormData): Promise<void> {
     throw error;
   }
 
-  await notify(
-    "COACH",
-    payment.chapterId,
-    "Payment approved",
-    `${payment.event.name} — registration confirmed.`,
-    "/dashboard/payments",
-  );
+  try {
+    await notify(
+      "COACH",
+      payment.chapterId,
+      "Payment approved",
+      `${payment.event.name} — registration confirmed.`,
+      "/dashboard/payments",
+    );
+  } catch (error) {
+    reportError("notify-coach-failed", { paymentId: id }, error);
+  }
 
   logInfo("payment-approved", {
     paymentId: id,
@@ -73,15 +77,19 @@ export async function rejectPayment(formData: FormData): Promise<void> {
     throw error;
   }
 
-  await notify(
-    "COACH",
-    payment.chapterId,
-    "Payment needs attention",
-    reason
-      ? `${payment.event.name} — ${reason}`
-      : `${payment.event.name} — please resubmit your payment proof.`,
-    "/dashboard/payments",
-  );
+  try {
+    await notify(
+      "COACH",
+      payment.chapterId,
+      "Payment needs attention",
+      reason
+        ? `${payment.event.name} — ${reason}`
+        : `${payment.event.name} — please resubmit your payment proof.`,
+      "/dashboard/payments",
+    );
+  } catch (error) {
+    reportError("notify-coach-failed", { paymentId: id }, error);
+  }
 
   logInfo("payment-rejected", {
     paymentId: id,
