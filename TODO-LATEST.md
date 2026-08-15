@@ -122,9 +122,10 @@ Production-readiness work items from full-stack audit (2026-08-14).
 ### P2-5 Tests
 - [x] Unit: `bracket-core`, `division-core`, form parsers
 - [x] Integration: server actions (enroll, payment, bracket gen)
-- [ ] E2E: coach flow (register → enroll → pay → view bracket)
+- [x] E2E: coach flow (register → enroll → pay → view bracket)
 - **Effort:** ~1–2 days
-- **Done (unit + integration tiers):** vitest 3 + `vitest.config.ts` (node env, `@/` alias), `npm test` / `test:unit` / `test:integration`. 82 tests — unit tier covers bracket-core (layout, tree gen, bye resolution, participants/champions), division-core (age/weight bounds, `buildDivisions`, `athletesInDivision`), and form parsers (payments/events/athletes) incl. every rejection branch. Integration tier (`tests/integration/actions.test.ts`, 14 tests) runs the real server actions against a local Postgres test DB (`taekwondo_test`, migrations applied via `prisma migrate deploy`): `enrollAthletes` (owned/alien athletes, draft event, closed deadline, no chapter), `unenrollAthlete` (own vs other chapter), `submitPayment` (create pending, block double-submit, no enrollment, non-image proof), `generateDivisions` + `generateBracket` (cells + coach notifications), `recordWinner`. Clerk auth + `next/cache` mocked in `tests/setup.ts`; tables wiped per test. E2E remains TODO — needs Playwright browsers + Clerk test mode.
+- **Done (unit + integration tiers):** vitest 3 + `vitest.config.ts` (node env, `@/` alias), `npm test` / `test:unit` / `test:integration`. 82 tests — unit tier covers bracket-core (layout, tree gen, bye resolution, participants/champions), division-core (age/weight bounds, `buildDivisions`, `athletesInDivision`), and form parsers (payments/events/athletes) incl. every rejection branch. Integration tier (`tests/integration/actions.test.ts`, 14 tests) runs the real server actions against a local Postgres test DB (`taekwondo_test`, migrations applied via `prisma migrate deploy`): `enrollAthletes` (owned/alien athletes, draft event, closed deadline, no chapter), `unenrollAthlete` (own vs other chapter), `submitPayment` (create pending, block double-submit, no enrollment, non-image proof), `generateDivisions` + `generateBracket` (cells + coach notifications), `recordWinner`. Clerk auth + `next/cache` mocked in `tests/setup.ts`; tables wiped per test.
+- **Done (E2E):** Playwright + `@clerk/testing`. `npm run test:e2e` (9 tests) runs a production build on `:3100` against a local `taekwondo_test` DB with Clerk dev-instance auth. `e2e/global.setup.mts` provisions a unique Clerk coach user + seeds a deterministic published event (fixed id so the Next fetch-cache stays valid across runs), `e2e/global.teardown.mts` deletes created users. `e2e/auth.setup.mts` signs in via `clerk.signIn` ticket and saves storageState. `e2e/coach-flow.spec.mts` (serial) drives the real UI: register chapter → organizer approves (simulated via DB) → claim on dashboard → add athlete → enroll → submit payment (local upload, `CLOUDINARY_URL=""` + `ALLOW_LOCAL_UPLOADS=true`) → view published bracket. Organizer-side steps (approval, division/bracket draw) are direct DB writes; admin flows stay covered by integration tests. DB helpers in `e2e/helpers/db.mts` use `pg` raw SQL (generated Prisma client is ESM-only and breaks Playwright's loader). Gotchas hit: Clerk password ≥15 chars, ESM `.mts` files, `updatedAt`/`createdAt` NOT NULL need `now()`, claim needs a second request to pick up fresh Clerk metadata.
 
 ---
 
@@ -163,6 +164,6 @@ Phase 3 (week 2):         P1-3 → P1-6 → P2-1 → P2-2
 Phase 4 (week 3+):        P2-3 → P2-4 → P2-5 → P3-*
 ```
 
-**Done:** P0 all · P1 all · P2-1…P2-4 (2026-08-15) · P2-5 unit + integration tiers (2026-08-15). Remaining: P2-5 E2E, P3-* backlog.
+**Done:** P0 all · P1 all · P2-1…P2-4 (2026-08-15) · P2-5 all tiers (unit + integration + E2E, 2026-08-15). Remaining: P3-* backlog.
 
 Say **"implement P0"** / **"implement P1"** / etc. and I'll start on that section.

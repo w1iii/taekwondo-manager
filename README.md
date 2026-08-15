@@ -55,6 +55,7 @@ The `DATABASE_URL` should point at Neon's **pooled** endpoint (`-pooler`) with
 npm test                 # all tests (unit + integration)
 npm run test:unit        # pure-logic unit tests (no DB)
 npm run test:integration # server-action integration tests
+npm run test:e2e         # Playwright coach-flow E2E (builds + starts on :3100)
 ```
 
 Integration tests hit a real Postgres test database. Set up once:
@@ -67,6 +68,15 @@ DATABASE_URL="postgresql://<user>@localhost:5432/taekwondo_test" npx prisma migr
 The default test URL in `tests/setup.ts` is `postgresql://wii@localhost:5432/taekwondo_test`
 (override with the `DATABASE_URL` env var). Clerk auth and `next/cache` are mocked
 (`tests/setup.ts`); every test wipes the tables in `beforeEach`.
+
+E2E uses the same `taekwondo_test` DB (override with `E2E_DATABASE_URL`). It needs:
+- a Clerk dev instance with keys in `.env.local` (tests use Clerk test-mode sign-in tickets)
+- `npx playwright install chromium` once
+- ports 3000 and 3100 free (the suite builds and serves a production build on 3100;
+  stop your local `next dev` first — a second dev server won't start)
+
+`e2e/global.setup.mts` provisions a unique Clerk user and seeds a deterministic
+published event; `e2e/global.teardown.mts` deletes the created users afterwards.
 
 ## Operations notes
 

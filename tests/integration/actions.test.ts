@@ -320,10 +320,15 @@ describe("recordWinner", () => {
     await generateBracket(bracketForm);
 
     const cells = await db.bracketCell.findMany({ where: { divisionId: division!.id } });
-    // First-round match with two athletes fed in.
-    const match = cells.find(
-      (c) => c.childAId && c.childBId && !c.athleteId,
-    )!;
+    // First-round match with two real athletes fed in (both children hold
+    // athleteIds). Semi-final cells also match "two children, no athleteId",
+    // but their children are matches, not athletes — so filter on that too.
+    const match = cells.find((c) => {
+      if (!c.childAId || !c.childBId || c.athleteId) return false;
+      const childA = cells.find((cell) => cell.id === c.childAId)!;
+      const childB = cells.find((cell) => cell.id === c.childBId)!;
+      return Boolean(childA.athleteId && childB.athleteId);
+    })!;
     expect(match).toBeTruthy();
     const a = cells.find((c) => c.id === match.childAId)!;
     expect(a.athleteId).toBeTruthy();
