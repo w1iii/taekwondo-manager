@@ -65,7 +65,7 @@ export function CancelPaymentButton({
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/50" />
-        <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-background p-6 shadow-lg">
+        <Dialog.Popup className="fixed left-[50%] top-[50%] z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-background p-6 shadow-lg">
           <Dialog.Title className="text-lg font-semibold">Cancel Payment</Dialog.Title>
           <Dialog.Description className="mt-1 text-sm text-muted-foreground">
             Please provide a reason for cancelling this payment.
