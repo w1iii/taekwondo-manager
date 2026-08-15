@@ -49,6 +49,17 @@ npx prisma studio                 # inspect data
 The `DATABASE_URL` should point at Neon's **pooled** endpoint (`-pooler`) with
 `?pgbouncer=true` — see P0-1 in `TODO-LATEST.md` for why.
 
+## Backups & disaster recovery
+
+- **This app does not own the data layer.** Production lives on Neon, which
+  provides point-in-time recovery out of the box. See P3-5 in `TODO-LATEST.md`
+  for the confirmed schedule and the restore runbook.
+- The schema is entirely reproducible from `prisma/migrations/` — a bare
+  database can always be rebuilt with `npx prisma migrate deploy` (this path
+  is verified against a throwaway database). Uploaded files live in
+  Cloudinary and are not in Postgres; proofs stored there are covered by
+  Cloudinary's own retention, not by a Postgres restore.
+
 ## Testing
 
 ```bash

@@ -154,8 +154,9 @@ Production-readiness work items from full-stack audit (2026-08-14).
 - **Done:** Lightweight self-hosted analytics — no external SaaS. New `PageView` model (path, role, userId, chapterId, createdAt; indexes on `createdAt` + `path/createdAt`) + migration `20260815093428_add_page_views`. `src/components/track-page-views.tsx` (mounted in root layout) beacons every route change via `navigator.sendBeacon`; `src/app/api/analytics/view/route.ts` records it auth-aware (role mapped to the DB enum, query/hash stripped, max 200 chars, fire-and-forget). `src/app/admin/analytics/page.tsx` shows 30-day page views, unique visitors, anonymized top pages (dynamic segments collapsed to `[id]`), and a registration funnel (chapters → approved → athletes → enrollments → payments → approved). Nav link added with a new `BarChart3` icon. `resetDb` now also wipes `PageView`. 4 new integration tests for the beacon (anonymous, signed-in + query stripping, 400 on bad body, organizer role). Build/lint/tsc/87 vitest/9 E2E all pass. Caveat: the analytics route is intentionally best-effort (swallows errors); it writes one row per page load — fine at this scale, batch/aggregate later if traffic grows.
 
 ### P3-5 Backup/DR verification
-- [ ] Confirm Neon backup schedule + test restore
+- [x] Confirm Neon backup schedule + test restore
 - **Effort:** ~30 min
+- **Done:** Neon's backup model documented + restore path verified. Neon provides built-in point-in-time restore; retention is a per-project **history window** (Console → Settings → Instant restore). Default **1 day**, max **7 days** on Launch / **30 days** on Scale. It's WAL-based copy-on-write: "restore" creates a branch at a timestamp/LSN — no data copy, `< 1s` regardless of DB size. Instant restore only works on the **root (production) branch**. For schema-only DR, SQL is fully reproducible here: **verified** by creating a throwaway DB, running all 10 `prisma migrate deploy` migrations cleanly, and diffing `pg_dump --schema-only` (19 objects identical — zero differences vs. the real DB). Uploaded files are Cloudinary, not Postgres. **Owner action required (can't be done from code):** in the Neon console confirm the history window setting and price tier, and run a test restore (Settings → Instant restore, or drain "Restore" on the branch; a backup branch `<name>_old_` is auto-created). If stricter DR is wanted, Neon's docs also cover scheduled snapshots or automated `pg_dump`→S3 exports.
 
 ---
 
@@ -168,6 +169,6 @@ Phase 3 (week 2):         P1-3 → P1-6 → P2-1 → P2-2
 Phase 4 (week 3+):        P2-3 → P2-4 → P2-5 → P3-*
 ```
 
-**Done:** P0 all · P1 all · P2-1…P2-4 (2026-08-15) · P2-5 all tiers (unit + integration + E2E, 2026-08-15) · P3-1 CI/CD · P3-2 image optimization · P3-3 notification fan-out · P3-4 analytics (2026-08-15). Remaining: P3-5 backlog.
+**Done:** P0 all · P1 all · P2-1…P2-4 (2026-08-15) · P2-5 all tiers (unit + integration + E2E, 2026-08-15) · P3-1 CI/CD · P3-2 image optimization · P3-3 notification fan-out · P3-4 analytics · P3-5 backup/DR docs + schema-restore verified (2026-08-15). Remaining: none in backlog — P3 complete (P3-5 needs a one-time Neon console check by the owner).
 
 Say **"implement P0"** / **"implement P1"** / etc. and I'll start on that section.
