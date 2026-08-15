@@ -16,7 +16,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npx prisma generate
       - run: npm run lint
+      - run: npx next typegen
       - run: npx tsc --noEmit
 
   build:
