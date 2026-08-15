@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { startTransition, useState } from "react";
 import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -43,11 +43,11 @@ export function EnrollForm({
 
   async function handleSubmit(formData: FormData) {
     selected.forEach((id) => formData.append("athleteId", id));
-    const result = (await formAction(formData)) as unknown as EnrollState;
-    if (result.ok) {
-      setSelected([]);
-      router.refresh();
-    }
+    setSelected([]);
+    startTransition(() => {
+      formAction(formData);
+    });
+    router.refresh();
   }
 
   return (

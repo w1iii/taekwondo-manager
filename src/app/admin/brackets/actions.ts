@@ -59,6 +59,7 @@ export async function generateDivisions(formData: FormData): Promise<void> {
   revalidateTag("brackets-cells", "max");
   revalidatePath("/admin/brackets");
   revalidatePath(`/admin/brackets/events/${eventId}`);
+  revalidatePath(`/admin/brackets/events/${eventId}/divisions`);
   revalidatePath("/dashboard/brackets");
   revalidatePath(`/dashboard/brackets/${eventId}`);
   revalidatePath("/admin");

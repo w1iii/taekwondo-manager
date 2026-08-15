@@ -2,14 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Users } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { formatDate, formatPesos } from "@/lib/events";
-import { genderLabel } from "@/lib/athletes";
-import { proofStatusLabel, proofStatusVariant } from "@/lib/payments";
+import { formatDate } from "@/lib/events";
+import { ChapterCard } from "./chapter-card";
 
 export const metadata = { title: "Event registrations" };
 
@@ -75,41 +73,13 @@ export default async function EventRegistrationsPage({
       ) : (
         <div className="space-y-4">
           {chapters.map(({ chapter, rows, payment }) => (
-            <Card key={chapter.id}>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="font-semibold">{chapter.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {rows.length} athlete{rows.length === 1 ? "" : "s"} ·{" "}
-                      {formatPesos(rows.length * event.entryFeePesos)}
-                    </p>
-                  </div>
-                  {payment ? (
-                    <Badge variant={proofStatusVariant(payment.status)}>
-                      {proofStatusLabel(payment.status)}
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline">No payment</Badge>
-                  )}
-                </div>
-
-                <ul className="divide-y">
-                  {rows.map(({ id: enrollmentId, athlete }) => (
-                    <li
-                      key={enrollmentId}
-                      className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
-                    >
-                      <span className="font-medium">{athlete.name}</span>
-                      <span className="text-muted-foreground">
-                        {genderLabel(athlete.gender)} · born {athlete.birthYear}
-                        {athlete.weightKg > 0 ? ` · ${athlete.weightKg} kg` : ""}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
+            <ChapterCard
+              key={chapter.id}
+              chapter={chapter}
+              rows={rows}
+              payment={payment}
+              entryFeePesos={event.entryFeePesos}
+            />
           ))}
         </div>
       )}

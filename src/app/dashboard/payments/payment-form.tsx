@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { startTransition, useEffect, useState } from "react";
 import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Receipt } from "lucide-react";
@@ -31,14 +31,19 @@ export function PaymentForm({
   const router = useRouter();
   const [fileName, setFileName] = useState("");
 
+  useEffect(() => {
+    if (state.ok) router.refresh();
+  }, [state.ok, router]);
+
   async function handleSubmit(formData: FormData) {
     const proof = formData.get("proof");
     if (proof instanceof File) {
       const compressed = await compressImageFile(proof);
       formData.set("proof", compressed, compressed.name);
     }
-    const result = (await formAction(formData)) as unknown as PaymentFormState;
-    if (result.ok) router.refresh();
+    startTransition(() => {
+      formAction(formData);
+    });
   }
 
   return (

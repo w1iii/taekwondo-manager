@@ -21,6 +21,7 @@ const STATUS_LABELS: Record<PaymentStatus, string> = {
   PENDING: "Pending",
   APPROVED: "Approved",
   REJECTED: "Rejected",
+  CANCELLED: "Cancelled",
 };
 
 function PaymentCard({

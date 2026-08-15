@@ -27,6 +27,7 @@ enum PaymentStatus {
   PENDING
   APPROVED
   REJECTED
+  CANCELLED
 }
 
 enum Role {

@@ -9,8 +9,9 @@ import { getChapterForUser } from "@/lib/chapters";
 import { db } from "@/lib/db";
 import { formatDate, formatPesos } from "@/lib/events";
 import { EventStatus, PaymentStatus } from "@/generated/prisma/client";
-import { submitPayment } from "./actions";
+import { submitPayment, cancelPayment } from "./actions";
 import { PaymentForm } from "./payment-form";
+import { CancelPaymentButton } from "./cancel-payment-button";
 
 export const metadata = { title: "Team Payment" };
 
@@ -18,11 +19,13 @@ const STATUS_LABELS: Record<PaymentStatus, string> = {
   PENDING: "Pending review",
   APPROVED: "Approved",
   REJECTED: "Rejected — resubmit",
+  CANCELLED: "Cancelled",
 };
 
 function statusVariant(status: PaymentStatus) {
   if (status === PaymentStatus.APPROVED) return "default";
   if (status === PaymentStatus.PENDING) return "secondary";
+  if (status === PaymentStatus.CANCELLED) return "outline";
   return "destructive";
 }
 
@@ -139,12 +142,25 @@ export default async function PaymentsPage() {
                           Receipt
                         </Button>
                       ) : null}
+                      {payment.status === PaymentStatus.PENDING ? (
+                        <CancelPaymentButton
+                          paymentId={payment.id}
+                          action={cancelPayment}
+                        />
+                      ) : null}
                     </p>
                     {payment.status === PaymentStatus.REJECTED ? (
                       <p role="alert" className="text-destructive">
                         {payment.rejectionReason
                           ? `Reason: ${payment.rejectionReason}`
                           : "Rejected. Update your details and resubmit."}
+                      </p>
+                    ) : null}
+                    {payment.status === PaymentStatus.CANCELLED ? (
+                      <p role="alert" className="text-muted-foreground">
+                        {payment.rejectionReason
+                          ? `Cancelled: ${payment.rejectionReason}`
+                          : "Cancelled."}
                       </p>
                     ) : null}
                     {payment.status === PaymentStatus.APPROVED ? (

@@ -13,6 +13,8 @@ import { notify } from "@/lib/notifications";
 import { formatPesos } from "@/lib/events";
 import { EventStatus, PaymentStatus, Prisma } from "@/generated/prisma/client";
 
+export type CancelPaymentState = { ok: true } | { ok: false; error: string };
+
 async function paymentDeps(eventId: string, chapterId: string) {
   const event = await db.event.findFirst({
     where: { id: eventId, status: EventStatus.PUBLISHED },
@@ -133,5 +135,70 @@ export async function submitPayment(formData: FormData): Promise<PaymentFormStat
   revalidatePath("/dashboard/payments");
   revalidatePath("/admin/payments");
   revalidatePath("/admin");
+  return { ok: true };
+}
+
+export async function cancelPayment(
+  paymentId: string,
+  reason: string,
+): Promise<CancelPaymentState> {
+  const user = await requireRole("coach");
+
+  const withinLimit = await checkRateLimit(`cancel-payment:${user.userId}`, 5, 60_000);
+  if (!withinLimit) {
+    return { ok: false, error: "Too many requests. Try again in a minute." };
+  }
+
+  if (!reason.trim()) {
+    return { ok: false, error: "Please provide a reason for cancellation." };
+  }
+
+  const chapter = await getChapterForUser(user);
+  if (!chapter) {
+    return { ok: false, error: "Chapter not found." };
+  }
+
+  const payment = await db.teamPayment.findUnique({ where: { id: paymentId } });
+  if (!payment) {
+    return { ok: false, error: "Payment not found." };
+  }
+
+  if (payment.chapterId !== chapter.id) {
+    return { ok: false, error: "Unauthorized." };
+  }
+
+  if (payment.status === PaymentStatus.CANCELLED) {
+    return { ok: false, error: "Payment is already cancelled." };
+  }
+
+  if (payment.status === PaymentStatus.APPROVED) {
+    return { ok: false, error: "Cannot cancel an approved payment." };
+  }
+
+  await db.teamPayment.update({
+    where: { id: paymentId },
+    data: {
+      status: PaymentStatus.CANCELLED,
+      rejectionReason: reason.trim(),
+      reviewedAt: new Date(),
+    },
+  });
+
+  logInfo("payment-cancelled", {
+    paymentId,
+    eventId: payment.eventId,
+    chapterId: chapter.id,
+    actorId: user.userId,
+  });
+
+  await notify(
+    "ORGANIZER",
+    null,
+    "Payment cancelled",
+    `${chapter.name} cancelled their payment. Reason: ${reason.trim()}`,
+    "/admin/payments",
+  );
+
+  revalidatePath("/dashboard/payments");
   return { ok: true };
 }
