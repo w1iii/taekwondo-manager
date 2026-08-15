@@ -5,12 +5,18 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { getChapterForUser } from "@/lib/chapters";
 import { db } from "@/lib/db";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { EventStatus, PaymentStatus } from "@/generated/prisma/client";
 
 export type EnrollState = { ok: true } | { ok: false; error: string };
 
 export async function enrollAthletes(formData: FormData): Promise<EnrollState> {
   const user = await requireRole("coach");
+
+  const withinLimit = await checkRateLimit(`enroll:${user.userId}`, 20, 60_000);
+  if (!withinLimit) {
+    return { ok: false, error: "Too many enrollments. Try again in a minute." };
+  }
 
   const eventId = String(formData.get("eventId") ?? "");
   if (!eventId) return { ok: false, error: "Missing event." };

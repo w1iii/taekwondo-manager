@@ -17,6 +17,7 @@ import {
 } from "@/generated/prisma/client";
 import { ActionButton } from "@/components/action-button";
 import { generateDivisions } from "./actions";
+import { unstable_cache } from "next/cache";
 
 export const metadata = { title: "Brackets" };
 
@@ -30,10 +31,8 @@ type AthleteRow = {
 
 type DivisionRow = Division & { weightClass: { minKg: number | null; maxKg: number | null } | null };
 
-export default async function BracketsAdminPage() {
-  await requireRole("organizer");
-
-  const events = await db.event.findMany({
+async function getAdminBracketsEvents() {
+  return db.event.findMany({
     where: { status: EventStatus.PUBLISHED },
     include: {
       divisions: { include: { weightClass: true } },
@@ -41,6 +40,16 @@ export default async function BracketsAdminPage() {
     },
     orderBy: { eventDate: "desc" },
   });
+}
+
+const getCachedAdminBracketsEvents = unstable_cache(getAdminBracketsEvents, ["admin-brackets-events"], {
+  tags: ["events-published"],
+});
+
+export default async function BracketsAdminPage() {
+  await requireRole("organizer");
+
+  const events = await getCachedAdminBracketsEvents();
 
   const divisionIds = events.flatMap((e) => e.divisions.map((d) => d.id));
   const cellCounts = await db.bracketCell.groupBy({

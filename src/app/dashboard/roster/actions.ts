@@ -5,10 +5,16 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { getChapterForUser } from "@/lib/chapters";
 import { db } from "@/lib/db";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { parseAthleteFormData, type AthleteFormState } from "@/lib/athletes";
 
 export async function createAthlete(formData: FormData): Promise<AthleteFormState> {
   const user = await requireRole("coach");
+
+  const withinLimit = await checkRateLimit(`create-athlete:${user.userId}`, 30, 60_000);
+  if (!withinLimit) {
+    return { ok: false, error: "Too many athlete additions. Try again in a minute." };
+  }
 
   const parsed = parseAthleteFormData(formData);
   if (!parsed.ok) return parsed;

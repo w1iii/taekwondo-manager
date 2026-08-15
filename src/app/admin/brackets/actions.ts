@@ -1,9 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { logInfo, reportError } from "@/lib/log";
 import {
   generateBracketCells,
   resolveByeWinners,
@@ -19,7 +20,7 @@ const ALL_EVENT_TYPES = [
 ];
 
 export async function generateDivisions(formData: FormData): Promise<void> {
-  await requireRole("organizer");
+  const user = await requireRole("organizer");
 
   const eventId = String(formData.get("eventId") ?? "");
   if (!eventId) return;
@@ -42,18 +43,26 @@ export async function generateDivisions(formData: FormData): Promise<void> {
     eventTypes,
   );
 
-  await db.$transaction([
-    db.division.deleteMany({ where: { eventId } }),
-    db.division.createMany({ data: divisions.map((d) => ({ ...d, eventId })) }),
-  ]);
+  try {
+    await db.$transaction([
+      db.division.deleteMany({ where: { eventId } }),
+      db.division.createMany({ data: divisions.map((d) => ({ ...d, eventId })) }),
+    ]);
+  } catch (error) {
+    reportError("generate-divisions-failed", { eventId, actorId: user.userId }, error);
+    throw error;
+  }
 
+  logInfo("divisions-generated", { eventId, count: divisions.length });
+  revalidateTag("events-published", "max");
+  revalidateTag("brackets-cells", "max");
   revalidatePath("/admin/brackets");
   revalidatePath("/dashboard/brackets");
   revalidatePath("/admin");
 }
 
 export async function generateBracket(formData: FormData): Promise<void> {
-  await requireRole("organizer");
+  const user = await requireRole("organizer");
 
   const divisionId = String(formData.get("divisionId") ?? "");
   if (!divisionId) return;
@@ -85,12 +94,17 @@ export async function generateBracket(formData: FormData): Promise<void> {
 
   const cells = resolveByeWinners(generateBracketCells(athletes));
   if (cells.length > 0) {
-    await db.$transaction([
-      db.bracketCell.deleteMany({ where: { divisionId } }),
-      db.bracketCell.createMany({
-        data: cells.map((c) => ({ ...c, divisionId })),
-      }),
-    ]);
+    try {
+      await db.$transaction([
+        db.bracketCell.deleteMany({ where: { divisionId } }),
+        db.bracketCell.createMany({
+          data: cells.map((c) => ({ ...c, divisionId })),
+        }),
+      ]);
+    } catch (error) {
+      reportError("generate-bracket-failed", { divisionId, actorId: user.userId }, error);
+      throw error;
+    }
 
     const chapters = await db.enrollment.findMany({
       where: { eventId: division.eventId },
@@ -108,6 +122,8 @@ export async function generateBracket(formData: FormData): Promise<void> {
     });
   }
 
+  logInfo("bracket-generated", { divisionId, actorId: user.userId, cells: cells.length });
+  revalidateTag("brackets-cells", "max");
   revalidatePath("/admin/brackets");
   revalidatePath(`/admin/brackets/${divisionId}`);
   revalidatePath("/dashboard/brackets");
@@ -121,13 +137,14 @@ export async function resetBracket(formData: FormData): Promise<void> {
 
   await db.bracketCell.deleteMany({ where: { divisionId } });
 
+  revalidateTag("brackets-cells", "max");
   revalidatePath("/admin/brackets");
   revalidatePath(`/admin/brackets/${divisionId}`);
   revalidatePath("/dashboard/brackets");
 }
 
 export async function recordWinner(formData: FormData): Promise<void> {
-  await requireRole("organizer");
+  const user = await requireRole("organizer");
 
   const divisionId = String(formData.get("divisionId") ?? "");
   const matchId = String(formData.get("matchId") ?? "");
@@ -165,15 +182,31 @@ export async function recordWinner(formData: FormData): Promise<void> {
     }
   }
 
-  await db.$transaction(
-    [...toUpdate].map((id) =>
-      db.bracketCell.update({
-        where: { id },
-        data: { winnerAthleteId: id === matchId ? winnerAthleteId : null },
-      }),
-    ),
-  );
+  try {
+    await db.$transaction(
+      [...toUpdate].map((id) =>
+        db.bracketCell.update({
+          where: { id },
+          data: { winnerAthleteId: id === matchId ? winnerAthleteId : null },
+        }),
+      ),
+    );
+  } catch (error) {
+    reportError(
+      "record-winner-failed",
+      { divisionId, matchId, actorId: user.userId },
+      error,
+    );
+    throw error;
+  }
 
+  logInfo("winner-recorded", {
+    divisionId,
+    matchId,
+    actorId: user.userId,
+    runnerUp: !clear && winnerAthleteId,
+  });
+  revalidateTag("brackets-cells", "max");
   revalidatePath(`/admin/brackets/${divisionId}`);
   revalidatePath("/admin/brackets");
   revalidatePath("/dashboard/brackets");

@@ -4,11 +4,12 @@ import { revalidatePath } from "next/cache";
 
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { logInfo, reportError } from "@/lib/log";
 import { notify } from "@/lib/notifications";
 import { PaymentStatus } from "@/generated/prisma/client";
 
 export async function approvePayment(formData: FormData): Promise<void> {
-  await requireRole("organizer");
+  const user = await requireRole("organizer");
 
   const id = String(formData.get("id") ?? "");
   if (!id) return;
@@ -19,10 +20,15 @@ export async function approvePayment(formData: FormData): Promise<void> {
   });
   if (!payment) return;
 
-  await db.teamPayment.update({
-    where: { id },
-    data: { status: PaymentStatus.APPROVED, reviewedAt: new Date() },
-  });
+  try {
+    await db.teamPayment.update({
+      where: { id },
+      data: { status: PaymentStatus.APPROVED, reviewedAt: new Date() },
+    });
+  } catch (error) {
+    reportError("approve-payment-failed", { paymentId: id, actorId: user.userId }, error);
+    throw error;
+  }
 
   await notify(
     "COACH",
@@ -32,13 +38,19 @@ export async function approvePayment(formData: FormData): Promise<void> {
     "/dashboard/payments",
   );
 
+  logInfo("payment-approved", {
+    paymentId: id,
+    chapterId: payment.chapterId,
+    eventId: payment.eventId,
+    actorId: user.userId,
+  });
   revalidatePath("/admin/payments");
   revalidatePath("/admin");
   revalidatePath("/dashboard/payments");
 }
 
 export async function rejectPayment(formData: FormData): Promise<void> {
-  await requireRole("organizer");
+  const user = await requireRole("organizer");
 
   const id = String(formData.get("id") ?? "");
   if (!id) return;
@@ -51,10 +63,15 @@ export async function rejectPayment(formData: FormData): Promise<void> {
   });
   if (!payment) return;
 
-  await db.teamPayment.update({
-    where: { id },
-    data: { status: PaymentStatus.REJECTED, rejectionReason: reason, reviewedAt: new Date() },
-  });
+  try {
+    await db.teamPayment.update({
+      where: { id },
+      data: { status: PaymentStatus.REJECTED, rejectionReason: reason, reviewedAt: new Date() },
+    });
+  } catch (error) {
+    reportError("reject-payment-failed", { paymentId: id, actorId: user.userId }, error);
+    throw error;
+  }
 
   await notify(
     "COACH",
@@ -66,6 +83,12 @@ export async function rejectPayment(formData: FormData): Promise<void> {
     "/dashboard/payments",
   );
 
+  logInfo("payment-rejected", {
+    paymentId: id,
+    chapterId: payment.chapterId,
+    eventId: payment.eventId,
+    actorId: user.userId,
+  });
   revalidatePath("/admin/payments");
   revalidatePath("/admin");
   revalidatePath("/dashboard/payments");

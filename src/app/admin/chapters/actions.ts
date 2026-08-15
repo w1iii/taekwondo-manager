@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -17,6 +17,7 @@ export async function approveChapter(formData: FormData): Promise<void> {
     data: { status: ChapterStatus.APPROVED, rejectionReason: null },
   });
 
+  revalidateTag("chapters", "max");
   revalidatePath("/admin/chapters");
   revalidatePath("/admin");
 }
@@ -33,6 +34,7 @@ export async function rejectChapter(formData: FormData): Promise<void> {
     data: { status: ChapterStatus.REJECTED, rejectionReason: reason || null },
   });
 
+  revalidateTag("chapters", "max");
   revalidatePath("/admin/chapters");
   revalidatePath("/admin");
 }

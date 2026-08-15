@@ -4,12 +4,27 @@ import { clerkClient } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import type { SessionUser } from "@/lib/auth";
 import { ChapterStatus } from "@/generated/prisma/client";
+import { unstable_cache } from "next/cache";
 
 export const CHAPTER_STATUS_LABELS: Record<ChapterStatus, string> = {
   PENDING: "Pending",
   APPROVED: "Approved",
   REJECTED: "Rejected",
 };
+
+async function findChapterByEmail(email: string) {
+  return db.chapter.findFirst({
+    where: {
+      headCoachEmail: email,
+      status: ChapterStatus.APPROVED,
+      OR: [{ headCoachUserId: null }, { headCoachUserId: undefined }],
+    },
+  });
+}
+
+const getCachedChapterByEmail = unstable_cache(findChapterByEmail, ["chapter-by-email"], {
+  tags: ["chapters"],
+});
 
 /**
  * Finds the chapter a coach belongs to. A coach is linked either via
@@ -23,13 +38,7 @@ export async function getChapterForUser(user: SessionUser) {
 
   if (!user.email) return null;
 
-  return db.chapter.findFirst({
-    where: {
-      headCoachEmail: user.email,
-      status: ChapterStatus.APPROVED,
-      OR: [{ headCoachUserId: null }, { headCoachUserId: user.userId }],
-    },
-  });
+  return getCachedChapterByEmail(user.email);
 }
 
 /**

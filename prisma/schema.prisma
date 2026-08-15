@@ -215,3 +215,15 @@ model Notification {
   @@index([role, readAt])
   @@index([role, targetChapterId, readAt])
 }
+
+// Fixed-window rate limiter backed by Postgres (no external cache dependency).
+// One row per action:user key; windowStart resets when the window elapses.
+model RateLimit {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  count       Int      @default(0)
+  windowStart DateTime
+  updatedAt   DateTime @updatedAt
+
+  @@index([windowStart])
+}

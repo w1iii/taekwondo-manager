@@ -14,18 +14,27 @@ import {
   isRegistrationOpen,
 } from "@/lib/events";
 import { EventStatus } from "@/generated/prisma/client";
+import { unstable_cache } from "next/cache";
 
 export const metadata = { title: "Events" };
+
+async function getPublishedEvents() {
+  return db.event.findMany({
+    where: { status: EventStatus.PUBLISHED },
+    orderBy: { eventDate: "asc" },
+  });
+}
+
+const getCachedPublishedEvents = unstable_cache(getPublishedEvents, ["published-events"], {
+  tags: ["events-published"],
+});
 
 export default async function EventsCoachPage() {
   const user = await requireRole("coach");
 
   const chapter = await getChapterForUser(user);
 
-  const events = await db.event.findMany({
-    where: { status: EventStatus.PUBLISHED },
-    orderBy: { eventDate: "asc" },
-  });
+  const events = await getCachedPublishedEvents();
 
   const upcoming = events.filter((e) => isEventUpcoming(e.eventDate));
 

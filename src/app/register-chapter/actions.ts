@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { isProvince } from "@/lib/provinces";
 import { requireUser } from "@/lib/auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { saveUpload } from "@/lib/uploads";
 import { ChapterStatus, Prisma } from "@/generated/prisma/client";
 
@@ -31,6 +32,11 @@ export async function registerChapter(
   const headCoachEmail = user.email;
   if (!headCoachEmail) {
     return { ok: false, error: "Could not read your account email. Please sign out and back in." };
+  }
+
+  const withinLimit = await checkRateLimit(`register-chapter:${user.userId}`, 3, 3600_000);
+  if (!withinLimit) {
+    return { ok: false, error: "Too many registration attempts. Try again in an hour." };
   }
 
   if (name.length < 2) {

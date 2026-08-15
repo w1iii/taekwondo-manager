@@ -7,24 +7,44 @@ import { formatDate } from "@/lib/events";
 import { EventStatus, PaymentStatus } from "@/generated/prisma/client";
 import { BracketView } from "@/components/bracket-view";
 import { championsOf } from "@/lib/brackets";
+import { unstable_cache } from "next/cache";
 
 export const metadata = { title: "Brackets & Schedule" };
 
-export default async function BracketsCoachPage() {
-  await requireRole("coach");
-
-  const events = await db.event.findMany({
+async function getPublishedEventsWithDivisions() {
+  return db.event.findMany({
     where: { status: EventStatus.PUBLISHED },
     include: { divisions: true },
     orderBy: { eventDate: "asc" },
   });
+}
 
-  const divisionIds = events.flatMap((e) => e.divisions.map((d) => d.id));
-  const cells = await db.bracketCell.findMany({
+const getCachedPublishedEventsWithDivisions = unstable_cache(
+  getPublishedEventsWithDivisions,
+  ["published-events-divisions"],
+  { tags: ["events-published"] },
+);
+
+async function getBracketCells(divisionIds: string[]) {
+  if (divisionIds.length === 0) return [];
+  return db.bracketCell.findMany({
     where: { divisionId: { in: divisionIds } },
     include: { athlete: true },
     orderBy: [{ round: "desc" }, { position: "asc" }],
   });
+}
+
+const getCachedBracketCells = unstable_cache(getBracketCells, ["bracket-cells"], {
+  tags: ["brackets-cells"],
+});
+
+export default async function BracketsCoachPage() {
+  await requireRole("coach");
+
+  const events = await getCachedPublishedEventsWithDivisions();
+
+  const divisionIds = events.flatMap((e) => e.divisions.map((d) => d.id));
+  const cells = await getCachedBracketCells(divisionIds);
 
   const cellsByDivision = new Map<string, (typeof cells)[number][]>();
   for (const cell of cells) {

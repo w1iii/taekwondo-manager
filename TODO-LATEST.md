@@ -54,34 +54,39 @@ Production-readiness work items from full-stack audit (2026-08-14).
 - **Done:** added shared `Pagination` component + `src/lib/pagination.ts` helpers; per-status pagination for payments/chapters (keys `pending`/`approved`/`rejected`), single `page` param for athletes preserving all filters; `pg_trgm` GIN index on `Athlete.name` (migration `20260814162848_add_athlete_trgm` with `CREATE EXTENSION IF NOT EXISTS pg_trgm`). PAGE_SIZE = 25.
 
 ### P1-2 Caching layer for hot reads
-- [ ] `unstable_cache` on: published events list, brackets cells, chapter lookup
-- [ ] Revalidate on mutations (already have `revalidatePath` calls — wire to cache tags)
+- [x] `unstable_cache` on: published events list, brackets cells, chapter lookup
+- [x] Revalidate on mutations (already have `revalidatePath` calls — wire to cache tags)
 - **Why:** every page is fully dynamic, zero caching. 100 users × 5 queries = 500 queries/sec burst.
 - **Files:** `src/app/dashboard/events/page.tsx`, `src/app/dashboard/brackets/page.tsx`, `src/app/admin/brackets/page.tsx`, `src/lib/chapters.ts`
 - **Effort:** ~2–3 hr
+- **Done:** reads already cached (`events-published`, `brackets-cells`, `chapters` tags). Wired tag revalidation into all mutations: brackets (`generateDivisions`/`generateBracket`/`resetBracket`/`recordWinner`), chapters (`approveChapter`/`rejectChapter`), events (`createEvent`/`updateEvent`/`deleteEvent`/`setEventStatus`). Note: this Next version deprecated 1-arg `revalidateTag` — use `revalidateTag(tag, "max")` in Server Actions (stale-while-revalidate) — see `node_modules/next/dist/docs/` for the 2-arg form.
 
 ### P1-3 Rate limiting on server actions
-- [ ] Add rate limit (e.g., upstash/redis or in-DB counter) on: `enrollAthletes`, `submitPayment`, `registerChapter`, `createAthlete`
+- [x] Add rate limit (e.g., upstash/redis or in-DB counter) on: `enrollAthletes`, `submitPayment`, `registerChapter`, `createAthlete`
 - **Why:** abuse vector — no limits anywhere today.
 - **Files:** all `actions.ts` files
 - **Effort:** ~2 hr
+- **Done:** in-DB fixed-window limiter (`RateLimit` model, migration `20260815021716_add_rate_limit`). `src/lib/rate-limit.ts` uses a single atomic `INSERT … ON CONFLICT` upsert so concurrent requests can't race the counter (count++ is server-side), then checks `count <= limit`. Per-user keys, friendly "Try again" errors. Limits: enroll 20/min, payment 5/min, register-chapter 3/hr, create-athlete 30/min.
 
 ### P1-4 Handle `submitPayment` race (unhandled P2002 → 500)
-- [ ] Wrap create in try/catch for unique constraint → return friendly error
-- [ ] Or use `upsert` instead of find-then-create
+- [x] Wrap create in try/catch for unique constraint → return friendly error
+- [x] Or use `upsert` instead of find-then-create
 - **Files:** `src/app/dashboard/payments/actions.ts`
 - **Effort:** ~20 min
+- **Done:** wrapped the `create` in try/catch for `P2002` (TOCTOU backstop — a second request can't slip between the existence check and the insert) and `deleteUpload(proofUrl)` so the failed race doesn't orphan a private proof file in Cloudinary.
 
 ### P1-5 Organizer role provisioning
-- [ ] Add code path to set `role: "organizer"` (currently manual Clerk dashboard edit only)
-- [ ] Document the manual step in README as fallback
+- [x] Add code path to set `role: "organizer"` (currently manual Clerk dashboard edit only)
+- [x] Document the manual step in README as fallback
 - **Files:** `src/lib/chapters.ts`, README
 - **Effort:** ~1 hr
+- **Done:** `scripts/grant-organizer.mjs <email> [--revoke]` hits Clerk's Backend API (user lookup → `public_metadata.role`), the exact key `auth.ts` reads — takes effect next request, no re-login. README documents both the script and the manual Dashboard fallback.
 
 ### P1-6 Error monitoring + logging
-- [ ] Add Sentry (or similar) — server actions + pages
-- [ ] Structured logging for payment/bracket mutations
+- [x] Add Sentry (or similar) — server actions + pages
+- [x] Structured logging for payment/bracket mutations
 - **Effort:** ~1–2 hr
+- **Done:** lightweight structured logger `src/lib/log.ts` (`logInfo`/`reportError`, JSON lines in prod) — no new dependency; swap bodies for `Sentry.captureException` later is one line per function. Wired into `submitPayment`, `approvePayment`, `rejectPayment`, `generateDivisions`, `generateBracket`, `recordWinner` (errors re-thrown after logging so UI still gets the failure). Added `app/global-error.tsx` top-level boundary that reports unexpected errors.
 
 ---
 

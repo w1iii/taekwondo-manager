@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireRole } from "@/lib/auth";
@@ -37,6 +37,7 @@ export async function createEvent(formData: FormData): Promise<EventFormState> {
     data: { ...parsed.data, imageUrl: typeof imageResult === "string" ? imageResult : null },
   });
 
+  revalidateTag("events-published", "max");
   revalidatePath("/admin/events");
   revalidatePath("/admin");
   redirect("/admin/events");
@@ -74,6 +75,7 @@ export async function updateEvent(formData: FormData): Promise<EventFormState> {
 
   await db.event.update({ where: { id }, data });
 
+  revalidateTag("events-published", "max");
   revalidatePath("/admin/events");
   revalidatePath("/admin");
   redirect("/admin/events");
@@ -89,6 +91,7 @@ export async function deleteEvent(formData: FormData): Promise<void> {
   await db.event.delete({ where: { id } });
   if (event?.imageUrl) await deleteUpload(event.imageUrl);
 
+  revalidateTag("events-published", "max");
   revalidatePath("/admin/events");
   revalidatePath("/admin");
 }
@@ -125,6 +128,7 @@ export async function setEventStatus(formData: FormData): Promise<void> {
     });
   }
 
+  revalidateTag("events-published", "max");
   revalidatePath("/admin/events");
   revalidatePath("/admin");
 }

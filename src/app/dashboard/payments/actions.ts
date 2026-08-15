@@ -5,11 +5,13 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { getChapterForUser } from "@/lib/chapters";
 import { db } from "@/lib/db";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { logInfo, reportError } from "@/lib/log";
 import { parsePaymentFormData, type PaymentFormState } from "@/lib/payments";
-import { saveUpload } from "@/lib/uploads";
+import { deleteUpload, saveUpload } from "@/lib/uploads";
 import { notify } from "@/lib/notifications";
 import { formatPesos } from "@/lib/events";
-import { EventStatus, PaymentStatus } from "@/generated/prisma/client";
+import { EventStatus, PaymentStatus, Prisma } from "@/generated/prisma/client";
 
 async function paymentDeps(eventId: string, chapterId: string) {
   const event = await db.event.findFirst({
@@ -23,6 +25,11 @@ async function paymentDeps(eventId: string, chapterId: string) {
 
 export async function submitPayment(formData: FormData): Promise<PaymentFormState> {
   const user = await requireRole("coach");
+
+  const withinLimit = await checkRateLimit(`payment:${user.userId}`, 5, 60_000);
+  if (!withinLimit) {
+    return { ok: false, error: "Too many payment submissions. Try again in a minute." };
+  }
 
   const eventId = String(formData.get("eventId") ?? "");
   if (!eventId) return { ok: false, error: "Missing event." };
@@ -79,16 +86,41 @@ export async function submitPayment(formData: FormData): Promise<PaymentFormStat
       },
     });
   } else {
-    await db.teamPayment.create({
-      data: {
-        eventId,
-        chapterId: chapter.id,
-        referenceNo: parsed.data.referenceNo,
-        proofUrl,
-        amountPesos,
-      },
-    });
+    try {
+      await db.teamPayment.create({
+        data: {
+          eventId,
+          chapterId: chapter.id,
+          referenceNo: parsed.data.referenceNo,
+          proofUrl,
+          amountPesos,
+        },
+      });
+    } catch (error) {
+      // Another request created the same (eventId, chapterId) row between our
+      // earlier existence check and this create (TOCTOU race on the unique
+      // constraint). Surface a friendly error instead of a 500, and remove the
+      // just-uploaded proof so no orphaned private file is left in storage.
+      await deleteUpload(proofUrl);
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        logInfo("payment-duplicate-blocked", { eventId, actorId: user.userId });
+        return {
+          ok: false,
+          error: "Your payment for this event was just submitted. Refresh to see its status.",
+        };
+      }
+      reportError("submit-payment-failed", { eventId, actorId: user.userId }, error);
+      throw error;
+    }
   }
+
+  logInfo("payment-submitted", {
+    eventId,
+    chapterId: chapter.id,
+    amountPesos,
+    actorId: user.userId,
+    resubmitted: Boolean(existing),
+  });
 
   await notify(
     "ORGANIZER",
