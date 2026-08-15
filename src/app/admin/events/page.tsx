@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { CalendarPlus, MapPin, Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -25,12 +26,15 @@ function EventCard({ event }: { event: Event & { _count: { enrollments: number }
     <Card>
       <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-start">
         {event.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- local uploads need the session cookie
-          <img
-            src={event.imageUrl}
-            alt={event.name}
-            className="h-28 w-full shrink-0 rounded-lg border object-cover bg-muted/40 sm:h-24 sm:w-36"
-          />
+          <div className="relative h-28 w-full shrink-0 rounded-lg bg-muted/40 sm:h-24 sm:w-36">
+            <Image
+              src={event.imageUrl}
+              alt={event.name}
+              fill
+              sizes="(min-width: 640px) 144px, 100vw"
+              className="rounded-lg object-cover"
+            />
+          </div>
         ) : null}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">

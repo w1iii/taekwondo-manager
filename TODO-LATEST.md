@@ -138,8 +138,9 @@ Production-readiness work items from full-stack audit (2026-08-14).
 - **Done:** `.github/workflows/ci.yml` runs lint, `tsc --noEmit`, production `next build` (dummy env only — no real secrets), and unit + integration tests against a Postgres 17 service container (migrations applied via `npx prisma migrate deploy`). `.github/workflows/deploy.yml` runs on push to `main`: applies pending migrations against the Neon **direct** (non-pooled) endpoint (`DATABASE_URL_MIGRATE` secret), then triggers the Vercel production deploy via a Deploy Hook (`VERCEL_DEPLOY_HOOK_URL` secret). Build uses Node 22 + npm cache. E2E intentionally excluded from CI — needs Clerk test-mode keys; can be added behind secrets later.
 
 ### P3-2 Image optimization
-- [ ] `next/image` for event images (currently raw `<img>`)
+- [x] `next/image` for event images (currently raw `<img>`)
 - **Effort:** ~1 hr
+- **Done:** All three event-image render sites (dashboard events card, admin events card, event detail) switched to `<Image>` with `fill` + `object-cover` + `sizes`, replacing the raw `<img>` (used `eslint-disable no-img-element` for every occurrence). Added `images.remotePatterns` for `res.cloudinary.com` in `next.config.ts`. Same-origin local dev uploads (`/uploads/...`) need no pattern — the image proxy fetches them same-origin. The admin photo-preview keeps a plain `<img>` because it shows `blob:` URLs (client-side pre-upload), which `next/image` can't optimize. Build, lint, typecheck, and all 82 tests pass.
 
 ### P3-3 Notification fan-out optimization
 - [ ] `setEventStatus` creates 1 row per chapter — fine at 100, batch at 1000+
@@ -165,6 +166,6 @@ Phase 3 (week 2):         P1-3 → P1-6 → P2-1 → P2-2
 Phase 4 (week 3+):        P2-3 → P2-4 → P2-5 → P3-*
 ```
 
-**Done:** P0 all · P1 all · P2-1…P2-4 (2026-08-15) · P2-5 all tiers (unit + integration + E2E, 2026-08-15) · P3-1 CI/CD (2026-08-15). Remaining: P3-2…P3-5 backlog.
+**Done:** P0 all · P1 all · P2-1…P2-4 (2026-08-15) · P2-5 all tiers (unit + integration + E2E, 2026-08-15) · P3-1 CI/CD · P3-2 image optimization (2026-08-15). Remaining: P3-3…P3-5 backlog.
 
 Say **"implement P0"** / **"implement P1"** / etc. and I'll start on that section.

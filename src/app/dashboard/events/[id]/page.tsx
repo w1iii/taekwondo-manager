@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { CalendarDays, MapPin, Tag, X } from "lucide-react";
 
@@ -68,12 +69,15 @@ export default async function EventRegisterPage({
       <Card>
         <CardContent className="space-y-1 text-sm">
           {event.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- local uploads need the session cookie
-            <img
-              src={event.imageUrl}
-              alt={event.name}
-              className="mb-2 h-48 w-full rounded-lg border object-cover bg-muted/40"
-            />
+            <div className="relative mb-2 h-48 w-full rounded-lg border bg-muted/40">
+              <Image
+                src={event.imageUrl}
+                alt={event.name}
+                fill
+                sizes="(min-width: 768px) 672px, 100vw"
+                className="rounded-lg object-cover"
+              />
+            </div>
           ) : null}
           <p className="flex items-center gap-2">
             <CalendarDays className="size-4" />

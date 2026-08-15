@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { CalendarDays, MapPin, Tag } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -71,12 +72,15 @@ export default async function EventsCoachPage() {
           {upcoming.map((event) => (
             <li key={event.id} className="overflow-hidden rounded-lg border bg-card">
               {event.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- local uploads need the session cookie
-                <img
-                  src={event.imageUrl}
-                  alt={event.name}
-                  className="h-28 w-full object-cover"
-                />
+                <div className="relative h-28 w-full">
+                  <Image
+                    src={event.imageUrl}
+                    alt={event.name}
+                    fill
+                    sizes="(min-width: 640px) 50vw, 100vw"
+                    className="object-cover"
+                  />
+                </div>
               ) : null}
               <div className="p-4">
                 <p className="font-medium">{event.name}</p>
