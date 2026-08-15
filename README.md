@@ -78,6 +78,27 @@ E2E uses the same `taekwondo_test` DB (override with `E2E_DATABASE_URL`). It nee
 `e2e/global.setup.mts` provisions a unique Clerk user and seeds a deterministic
 published event; `e2e/global.teardown.mts` deletes the created users afterwards.
 
+## CI/CD
+
+GitHub Actions (see `.github/workflows/`):
+
+- **CI** (PRs + pushes to `main`): lint, `tsc --noEmit`, production `next build`,
+  and unit + integration tests against a Postgres 17 service container. The build
+  uses dummy env — no real secrets are needed to compile.
+- **Deploy** (pushes to `main`): applies pending migrations via
+  `npx prisma migrate deploy`, then triggers the Vercel production deploy.
+
+Set up these GitHub secrets for the deploy workflow:
+
+- `DATABASE_URL_MIGRATE` — Neon **direct** (non-pooled) endpoint. Migrations use
+  this instead of the pooled `DATABASE_URL` because pooled/pgbouncer connections
+  can interfere with migration advisory locks.
+- `VERCEL_DEPLOY_HOOK_URL` — a Vercel Deploy Hook URL
+  (Vercel → Settings → Git → Deploy Hooks).
+
+E2E tests are intentionally excluded from CI — they need Clerk test-mode keys;
+add them behind secrets if you want them in CI.
+
 ## Operations notes
 
 - Rate limits (in-DB fixed window, see `src/lib/rate-limit.ts`) apply per user

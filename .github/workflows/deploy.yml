@@ -1,0 +1,34 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  migrate-and-deploy:
+    name: Migrate DB + Deploy to Vercel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # Apply pending migrations BEFORE the new build serves traffic. Use the
+      # Neon direct (non-pooled) endpoint here: pooled/pgbouncer connections
+      # can interfere with migration advisory locks.
+      - name: Run database migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_MIGRATE }}
+
+      # Trigger a Vercel production deploy once migrations are applied.
+      # Create a Deploy Hook in Vercel (Settings → Git → Deploy Hooks) and
+      # store its URL as VERCEL_DEPLOY_HOOK_URL.
+      - name: Trigger Vercel deploy
+        run: curl -X POST "$VERCEL_DEPLOY_HOOK_URL"
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}

@@ -132,9 +132,10 @@ Production-readiness work items from full-stack audit (2026-08-14).
 ## P3 — LOWER (backlog / nice to have)
 
 ### P3-1 CI/CD
-- [ ] GitHub Actions: lint + typecheck + build on PR
-- [ ] Auto-migrate on deploy (or `prisma migrate deploy` step)
+- [x] GitHub Actions: lint + typecheck + build on PR
+- [x] Auto-migrate on deploy (`prisma migrate deploy` step)
 - **Effort:** ~2 hr
+- **Done:** `.github/workflows/ci.yml` runs lint, `tsc --noEmit`, production `next build` (dummy env only — no real secrets), and unit + integration tests against a Postgres 17 service container (migrations applied via `npx prisma migrate deploy`). `.github/workflows/deploy.yml` runs on push to `main`: applies pending migrations against the Neon **direct** (non-pooled) endpoint (`DATABASE_URL_MIGRATE` secret), then triggers the Vercel production deploy via a Deploy Hook (`VERCEL_DEPLOY_HOOK_URL` secret). Build uses Node 22 + npm cache. E2E intentionally excluded from CI — needs Clerk test-mode keys; can be added behind secrets later.
 
 ### P3-2 Image optimization
 - [ ] `next/image` for event images (currently raw `<img>`)
@@ -164,6 +165,6 @@ Phase 3 (week 2):         P1-3 → P1-6 → P2-1 → P2-2
 Phase 4 (week 3+):        P2-3 → P2-4 → P2-5 → P3-*
 ```
 
-**Done:** P0 all · P1 all · P2-1…P2-4 (2026-08-15) · P2-5 all tiers (unit + integration + E2E, 2026-08-15). Remaining: P3-* backlog.
+**Done:** P0 all · P1 all · P2-1…P2-4 (2026-08-15) · P2-5 all tiers (unit + integration + E2E, 2026-08-15) · P3-1 CI/CD (2026-08-15). Remaining: P3-2…P3-5 backlog.
 
 Say **"implement P0"** / **"implement P1"** / etc. and I'll start on that section.
