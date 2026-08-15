@@ -49,6 +49,25 @@ npx prisma studio                 # inspect data
 The `DATABASE_URL` should point at Neon's **pooled** endpoint (`-pooler`) with
 `?pgbouncer=true` — see P0-1 in `TODO-LATEST.md` for why.
 
+## Testing
+
+```bash
+npm test                 # all tests (unit + integration)
+npm run test:unit        # pure-logic unit tests (no DB)
+npm run test:integration # server-action integration tests
+```
+
+Integration tests hit a real Postgres test database. Set up once:
+
+```bash
+createdb taekwondo_test
+DATABASE_URL="postgresql://<user>@localhost:5432/taekwondo_test" npx prisma migrate deploy
+```
+
+The default test URL in `tests/setup.ts` is `postgresql://wii@localhost:5432/taekwondo_test`
+(override with the `DATABASE_URL` env var). Clerk auth and `next/cache` are mocked
+(`tests/setup.ts`); every test wipes the tables in `beforeEach`.
+
 ## Operations notes
 
 - Rate limits (in-DB fixed window, see `src/lib/rate-limit.ts`) apply per user
