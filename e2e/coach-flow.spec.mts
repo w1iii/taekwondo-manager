@@ -132,6 +132,9 @@ test("coach views the published bracket", async ({ page }) => {
   await page.goto("/dashboard/brackets");
   await expect(page).toHaveURL(/\/dashboard\/brackets/);
 
+  await page.getByRole("link", { name: "View" }).click();
+  await expect(page).toHaveURL(/\/dashboard\/brackets\/.+/);
+
   await expect(page.getByText("Kyorugi Male Junior Open")).toBeVisible();
   await expect(page.getByText(ATHLETE_NAME)).toBeVisible();
   await expect(page.getByText("Jose E2E")).toBeVisible();

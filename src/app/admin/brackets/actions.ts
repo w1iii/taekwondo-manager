@@ -58,7 +58,9 @@ export async function generateDivisions(formData: FormData): Promise<void> {
   revalidateTag("events-published", "max");
   revalidateTag("brackets-cells", "max");
   revalidatePath("/admin/brackets");
+  revalidatePath(`/admin/brackets/events/${eventId}`);
   revalidatePath("/dashboard/brackets");
+  revalidatePath(`/dashboard/brackets/${eventId}`);
   revalidatePath("/admin");
 }
 
@@ -118,8 +120,10 @@ export async function generateBracket(formData: FormData): Promise<void> {
   logInfo("bracket-generated", { divisionId, actorId: user.userId, cells: cells.length });
   revalidateTag("brackets-cells", "max");
   revalidatePath("/admin/brackets");
+  revalidatePath(`/admin/brackets/events/${division.eventId}`);
   revalidatePath(`/admin/brackets/${divisionId}`);
   revalidatePath("/dashboard/brackets");
+  revalidatePath(`/dashboard/brackets/${division.eventId}`);
 }
 
 export async function resetBracket(formData: FormData): Promise<void> {
@@ -128,12 +132,17 @@ export async function resetBracket(formData: FormData): Promise<void> {
   const divisionId = String(formData.get("divisionId") ?? "");
   if (!divisionId) return;
 
+  const division = await db.division.findUnique({ where: { id: divisionId } });
+  if (!division) return;
+
   await db.bracketCell.deleteMany({ where: { divisionId } });
 
   revalidateTag("brackets-cells", "max");
   revalidatePath("/admin/brackets");
+  revalidatePath(`/admin/brackets/events/${division.eventId}`);
   revalidatePath(`/admin/brackets/${divisionId}`);
   revalidatePath("/dashboard/brackets");
+  revalidatePath(`/dashboard/brackets/${division.eventId}`);
 }
 
 export async function recordWinner(formData: FormData): Promise<void> {
@@ -209,6 +218,8 @@ export async function recordWinner(formData: FormData): Promise<void> {
   revalidateTag("brackets-cells", "max");
   revalidatePath(`/admin/brackets/${divisionId}`);
   revalidatePath("/admin/brackets");
+  revalidatePath(`/admin/brackets/events/${division.eventId}`);
   revalidatePath("/dashboard/brackets");
+  revalidatePath(`/dashboard/brackets/${division.eventId}`);
 }
 

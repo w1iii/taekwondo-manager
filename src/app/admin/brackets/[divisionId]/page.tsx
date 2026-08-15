@@ -81,7 +81,7 @@ export default async function DivisionBracketPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button render={<Link href="/admin/brackets" />} variant="outline">
+          <Button render={<Link href={`/admin/brackets/events/${division.event.id}`} />} variant="outline">
             <ArrowLeft />
             Back
           </Button>
