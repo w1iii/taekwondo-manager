@@ -6,14 +6,14 @@ export function Logo({ className }: { className?: string }) {
     <Link
       href="/"
       className={cn(
-        "flex flex-col items-center gap-1 text-center",
+        "flex items-center gap-2 text-xl font-bold tracking-tight text-white hover:text-white/80 hover:scale-105 transition-all",
         className
       )}
     >
-      <span className="text-2xl leading-none">🥋</span>
-      <span className="text-sm font-semibold tracking-tight">
-        Taekwondo Tournament Manager
+      <span className="material-symbols-outlined text-action-redwood">
+        sports_martial_arts
       </span>
+      TKD ARENA
     </Link>
   );
 }

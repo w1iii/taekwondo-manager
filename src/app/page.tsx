@@ -1,26 +1,23 @@
 import Link from "next/link";
-import { ClipboardList, Trophy, Users } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
 import { roleHome } from "@/lib/roles";
 
 const features = [
   {
-    icon: Users,
+    icon: "group",
     title: "Coach-side registration",
     description:
       "Register athletes once, then enter each event as a team. One submission, one payment for the whole chapter.",
   },
   {
-    icon: ClipboardList,
+    icon: "assignment_turned_in",
     title: "Paperless approvals",
     description:
       "Organizers approve chapters and payments in one queue. No more spreadsheets or receipts in your inbox.",
   },
   {
-    icon: Trophy,
+    icon: "emoji_events",
     title: "Live brackets",
     description:
       "Fair, random draws with instant result entry. Brackets and schedules update the moment a match ends.",
@@ -33,75 +30,147 @@ export default async function HomePage() {
   const home = authenticated ? roleHome(user.role) : "/sign-in";
 
   return (
-    <div className="flex flex-1 flex-col">
-      <header className="flex h-14 items-center gap-4 border-b px-4 sm:px-8">
-        <span className="text-lg leading-none">🥋</span>
-        <span className="text-sm font-semibold tracking-tight">
-          Taekwondo Tournament Manager
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          {authenticated ? (
-            <Button variant="outline" render={<Link href={home} />}>
-              My dashboard
-            </Button>
-          ) : (
-            <>
-              <Button variant="outline" render={<Link href="/sign-in" />}>
-                Sign in
-              </Button>
-              <Button render={<Link href="/sign-up" />}>Sign up</Button>
-            </>
-          )}
-        </div>
-      </header>
+    <div
+      className="bg-[#f2f2f2] text-navy-cool min-h-screen flex flex-col relative"
+      style={{
+        backgroundImage:
+          "url('https://lh3.googleusercontent.com/aida-public/AB6AXuC6efS3trwhCrV5AtGG0Y4ATFcN1Fuq0KqOwW97vA-lrR1UZdn9BP4_u7JtJOIH8HOZTz6NUgky-wNKhtcIqoBXp3pGrBAjde26ujdG7ajCNtw_g1WtCc1dMI3MFZ4bx0rTk2cNtUfoT90_oq8idg-IoKwLcE6ZyPCWvSoQGam7EkVLs73zgGwR93VNj_EZXDGvA-238pj2dsAG2Y2w552zhhhGFlF4jTi-LRKCu1gsCmq05XdGnrGryzEnkozfNsaN5A')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
+      }}
+    >
+      {/* Dark Overlay */}
+      <div className="absolute inset-0 bg-black/60 z-0" />
 
-      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 py-16 sm:px-8">
-        <section className="text-center">
-          <h1 className="mx-auto max-w-2xl text-4xl font-bold tracking-tight sm:text-5xl">
-            Tournament day, minus the paperwork.
-          </h1>
-          <p className="mx-auto mt-4 max-w-xl text-lg text-muted-foreground">
-            Chapter coaches register teams and pay once. Organizers approve,
-            draw brackets, and report results live. No public access — coaches
-            and organizers only.
-          </p>
-          <div className="mt-8 flex items-center justify-center gap-3">
+      {/* Nav */}
+      <nav className="relative z-20 w-full px-6 md:px-12 py-8 flex justify-between items-center text-white">
+        <div className="flex justify-between items-center w-full max-w-[1600px] mx-auto">
+          <Link
+            className="flex items-center gap-2 text-xl font-bold text-white tracking-tight"
+            href="/"
+          >
+            <span className="material-symbols-outlined text-action-redwood">
+              sports_martial_arts
+            </span>
+            TKD ARENA
+          </Link>
+
+          <div className="flex items-center gap-4">
             {authenticated ? (
-              <Button size="lg" render={<Link href={home} />}>
-                Open your dashboard
-              </Button>
+              <Link
+                href={home}
+                className="hidden md:block text-sm font-semibold text-white/80 hover:text-white transition-colors px-4 py-2"
+              >
+                My Dashboard
+              </Link>
             ) : (
               <>
-                <Button size="lg" render={<Link href="/sign-up" />}>
-                  Create an account
-                </Button>
-                <Button size="lg" variant="outline" render={<Link href="/sign-in" />}>
-                  Sign in
-                </Button>
+                <Link
+                  href="/sign-in"
+                  className="hidden md:block text-sm font-semibold text-white/80 hover:text-white transition-colors px-4 py-2"
+                >
+                  Log In
+                </Link>
+                <Link
+                  href="/sign-up"
+                  className="bg-white text-navy-cool text-sm font-semibold px-6 py-2.5 rounded-full hover:bg-white/90 transition-colors"
+                >
+                  Signup
+                </Link>
               </>
             )}
+            <button className="md:hidden text-white">
+              <span className="material-symbols-outlined">menu</span>
+            </button>
           </div>
-        </section>
+        </div>
+      </nav>
 
-        <section className="mt-20 grid gap-6 sm:grid-cols-3">
+      {/* Hero */}
+      <div className="relative z-10 flex-grow flex items-center justify-center p-4 md:p-8 lg:p-12">
+        <div className="w-full max-w-[1400px] min-h-[600px] rounded-lg overflow-hidden relative shadow-[0_20px_50px_rgba(0,0,0,0.3)] flex flex-col p-8 md:p-16 lg:p-24">
+          <main className="relative z-10 flex flex-col justify-center w-full lg:w-8/12 max-w-4xl h-full">
+            <div className="flex flex-col items-start text-left">
+              <h1 className="text-5xl md:text-6xl font-extrabold text-white mb-6 leading-[1.1] tracking-tight drop-shadow-md">
+                <span className="text-white">Taekwondo</span>
+                <br />
+                <span className="font-medium text-[#ef4444]">
+                  Tournament Manager.
+                </span>
+              </h1>
+              <p className="text-lg md:text-xl mb-10 leading-relaxed max-w-2xl drop-shadow-sm text-white">
+                Chapter coaches register teams and pay once. Organizers approve,
+                draw brackets, and report results live. No public access —
+                coaches and organizers only.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 w-full">
+                {authenticated ? (
+                  <Link
+                    href={home}
+                    className="bg-action-redwood text-white text-sm font-semibold px-8 py-4 rounded-full hover:bg-tertiary-container transition-colors shadow-lg shadow-action-redwood/30 flex items-center justify-center gap-2"
+                  >
+                    Open Dashboard
+                    <span className="material-symbols-outlined text-[18px]">
+                      arrow_forward
+                    </span>
+                  </Link>
+                ) : (
+                  <Link
+                    href="/sign-up"
+                    className="bg-action-redwood text-white text-sm font-semibold px-8 py-4 rounded-full hover:bg-tertiary-container transition-colors shadow-lg shadow-action-redwood/30 flex items-center justify-center gap-2"
+                  >
+                    Get Started
+                    <span className="material-symbols-outlined text-[18px]">
+                      arrow_forward
+                    </span>
+                  </Link>
+                )}
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+
+      {/* Features */}
+      <section className="relative z-10 w-full max-w-[1280px] mx-auto px-6 md:px-12 py-24">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {features.map((feature) => (
-            <Card key={feature.title}>
-              <CardHeader>
-                <feature.icon className="mb-2 size-6 text-primary" />
-                <CardTitle className="text-base">{feature.title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <CardDescription className="text-sm leading-relaxed">
-                  {feature.description}
-                </CardDescription>
-              </CardContent>
-            </Card>
+            <div
+              key={feature.title}
+              className="bg-white/10 backdrop-blur-xl border border-white/10 p-8 rounded-lg flex flex-col gap-4"
+            >
+              <div className="text-action-redwood">
+                <span className="material-symbols-outlined text-[36px]">
+                  {feature.icon}
+                </span>
+              </div>
+              <h3 className="text-white text-xl font-semibold">
+                {feature.title}
+              </h3>
+              <p className="text-surface-macadamia leading-relaxed">
+                {feature.description}
+              </p>
+            </div>
           ))}
-        </section>
-      </main>
+        </div>
+      </section>
 
-      <footer className="border-t px-4 py-6 text-center text-xs text-muted-foreground">
-        Access is limited to signed-in coaches and organizers.
+      {/* Footer */}
+      <footer className="relative z-20 w-full py-8 px-6 mt-auto">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 max-w-[1280px] mx-auto w-full opacity-70 hover:opacity-100 transition-opacity text-white">
+          <p className="text-xs tracking-wider uppercase">
+            &copy; 2026 TKD ARENA Taekwondo Systems
+          </p>
+          <div className="flex gap-6">
+            <a
+              className="text-xs hover:text-white/80 hover:underline transition-all uppercase tracking-wider"
+              href="#"
+            >
+              Contact Us
+            </a>
+          </div>
+        </div>
       </footer>
     </div>
   );

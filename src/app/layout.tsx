@@ -1,26 +1,26 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Manrope, Plus_Jakarta_Sans } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { TrackPageViews } from "@/components/track-page-views";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const manrope = Manrope({
+  variable: "--font-manrope",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const plusJakarta = Plus_Jakarta_Sans({
+  variable: "--font-plus-jakarta",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
   title: {
-    default: "Taekwondo Tournament Manager",
-    template: "%s · Taekwondo Tournament Manager",
+    default: "TKD ARENA - Tournament Manager",
+    template: "%s · TKD ARENA",
   },
   description:
-    "Tournament management for taekwondo chapters — registrations, payments, brackets, and live results.",
+    "Tournament day, minus the paperwork. Chapter coaches register teams and pay once. Organizers approve, draw brackets, and report results live.",
 };
 
 export const viewport: Viewport = {
@@ -35,8 +35,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <ClerkProvider afterSignOutUrl="/">
       <html
         lang="en"
-        className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+        className={`${manrope.variable} ${plusJakarta.variable} h-full antialiased`}
       >
+        <head>
+          <link
+            href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+            rel="stylesheet"
+          />
+        </head>
         <body className="min-h-full flex flex-col">
           <TrackPageViews />
           {children}
