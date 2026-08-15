@@ -12,7 +12,8 @@ import {
   generateDivisions,
   recordWinner,
 } from "@/app/admin/brackets/actions";
-import { EventStatus, PaymentStatus } from "@/generated/prisma/client";
+import { setEventStatus } from "@/app/admin/events/actions";
+import { EventStatus, ChapterStatus, PaymentStatus } from "@/generated/prisma/client";
 
 import {
   resetDb,
@@ -298,6 +299,38 @@ describe("recordWinner", () => {
   beforeEach(async () => {
     await resetDb();
     vi.mocked(requireRole).mockResolvedValue(organizer as never);
+  });
+
+  it("fans out one notification per approved chapter on publish", async () => {
+    await seedChapter();
+    await seedChapter({ headCoachEmail: "second@test.ph", name: "Second Dojang" });
+    await seedChapter({
+      status: ChapterStatus.PENDING,
+      headCoachEmail: "pending@test.ph",
+      name: "Pending Dojang",
+    });
+    await seedChapter({
+      status: ChapterStatus.REJECTED,
+      headCoachEmail: "rejected@test.ph",
+      name: "Rejected Dojang",
+    });
+    const event = await seedEvent({ status: EventStatus.DRAFT });
+
+    const draft = new FormData();
+    draft.set("id", event.id);
+    draft.set("status", EventStatus.DRAFT);
+    await setEventStatus(draft);
+
+    const published = new FormData();
+    published.set("id", event.id);
+    published.set("status", EventStatus.PUBLISHED);
+    await setEventStatus(published);
+
+    const notifs = await db.notification.findMany({ where: { role: "COACH" } });
+    // Only the two APPROVED chapters get notified; DRAFT/PENDING/REJECTED do not.
+    expect(notifs).toHaveLength(2);
+    expect(notifs.every((n) => n.title === "Registration open")).toBe(true);
+    expect(notifs.every((n) => n.link === "/dashboard/events")).toBe(true);
   });
 
   it("records a winner and cascades a clear downstream", async () => {

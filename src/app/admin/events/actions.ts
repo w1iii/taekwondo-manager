@@ -113,19 +113,14 @@ export async function setEventStatus(formData: FormData): Promise<void> {
   });
 
   if (rawStatus === EventStatus.PUBLISHED) {
-    const chapters = await db.chapter.findMany({
-      where: { status: "APPROVED" },
-      select: { id: true },
-    });
-    await db.notification.createMany({
-      data: chapters.map((c) => ({
-        role: "COACH",
-        targetChapterId: c.id,
-        title: "Registration open",
-        body: `${event.name} is accepting registrations.`,
-        link: "/dashboard/events",
-      })),
-    });
+    // Fan out one row per approved chapter with a single INSERT...SELECT —
+    // no in-memory chapter list, and it stays O(1) client-side work even at
+    // thousands of coaches.
+    await db.$executeRaw`
+      INSERT INTO "Notification" ("id", "role", "targetChapterId", "title", "body", "link", "createdAt")
+      SELECT gen_random_uuid(), 'COACH', "id", 'Registration open', ${`${event.name} is accepting registrations.`}, '/dashboard/events', now()
+      FROM "Chapter" WHERE "status" = 'APPROVED'
+    `;
   }
 
   revalidateTag("events-published", "max");

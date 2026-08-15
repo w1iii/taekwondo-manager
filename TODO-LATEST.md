@@ -143,9 +143,10 @@ Production-readiness work items from full-stack audit (2026-08-14).
 - **Done:** All three event-image render sites (dashboard events card, admin events card, event detail) switched to `<Image>` with `fill` + `object-cover` + `sizes`, replacing the raw `<img>` (used `eslint-disable no-img-element` for every occurrence). Added `images.remotePatterns` for `res.cloudinary.com` in `next.config.ts`. Same-origin local dev uploads (`/uploads/...`) need no pattern — the image proxy fetches them same-origin. The admin photo-preview keeps a plain `<img>` because it shows `blob:` URLs (client-side pre-upload), which `next/image` can't optimize. Build, lint, typecheck, and all 82 tests pass.
 
 ### P3-3 Notification fan-out optimization
-- [ ] `setEventStatus` creates 1 row per chapter — fine at 100, batch at 1000+
-- [ ] Consider polling/SSE for live bracket updates instead of full page refresh
+- [x] `setEventStatus` creates 1 row per chapter — fine at 100, batch at 1000+
+- [x] Polling for live bracket updates instead of full page refresh
 - **Effort:** ~2–3 hr
+- **Done:** (1) Notification fan-out for event publish rewritten as a single raw `INSERT…SELECT FROM "Chapter" WHERE status = 'APPROVED'` (`src/app/admin/events/actions.ts`) — no in-memory chapter list, O(1) client work at any scale. Covered by a new integration test (`setEventStatus` fans out to exactly the approved chapters, not PENDING/REJECTED). (2) `src/components/live-brackets-refresh.tsx` — a `use client` component on the coach brackets page that calls `router.refresh()` every 15s via RSC refresh (no full page reload), pauses on hidden tabs, and respects `prefers-reduced-motion`. It re-reads the same `unstable_cache` tags, so revalidation from `recordWinner`/`generateBracket` surfaces automatically. Deliberately NOT added to the admin brackets page — directors click through match controls and a mid-click refresh would disrupt them.
 
 ### P3-4 Analytics
 - [ ] Basic usage analytics (page views, registration funnel)
@@ -166,6 +167,6 @@ Phase 3 (week 2):         P1-3 → P1-6 → P2-1 → P2-2
 Phase 4 (week 3+):        P2-3 → P2-4 → P2-5 → P3-*
 ```
 
-**Done:** P0 all · P1 all · P2-1…P2-4 (2026-08-15) · P2-5 all tiers (unit + integration + E2E, 2026-08-15) · P3-1 CI/CD · P3-2 image optimization (2026-08-15). Remaining: P3-3…P3-5 backlog.
+**Done:** P0 all · P1 all · P2-1…P2-4 (2026-08-15) · P2-5 all tiers (unit + integration + E2E, 2026-08-15) · P3-1 CI/CD · P3-2 image optimization · P3-3 notification fan-out (2026-08-15). Remaining: P3-4…P3-5 backlog.
 
 Say **"implement P0"** / **"implement P1"** / etc. and I'll start on that section.

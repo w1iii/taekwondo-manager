@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { formatDate } from "@/lib/events";
 import { EventStatus, PaymentStatus } from "@/generated/prisma/client";
 import { BracketView } from "@/components/bracket-view";
+import { LiveBracketsRefresh } from "@/components/live-brackets-refresh";
 import { championsOf } from "@/lib/brackets";
 import { unstable_cache } from "next/cache";
 
@@ -70,6 +71,7 @@ export default async function BracketsCoachPage() {
 
   return (
     <div className="space-y-8">
+      <LiveBracketsRefresh />
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Brackets & Schedule</h1>
         <p className="text-sm text-muted-foreground">
