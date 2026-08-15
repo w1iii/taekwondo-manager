@@ -93,6 +93,9 @@ export async function saveUpload(
       public_id: filename,
       resource_type: "image",
       type: options.private ? "private" : "upload",
+      // Backstop for uploads that skip client-side compression: cap the stored
+      // dimensions so a multi-MB original never occupies full Cloudinary space.
+      transformation: [{ crop: "limit", width: 1600, height: 1600 }],
     });
     return result.secure_url;
   }

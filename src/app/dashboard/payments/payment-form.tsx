@@ -8,6 +8,7 @@ import { Loader2, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { compressImageFile } from "@/lib/client-image";
 import type { PaymentFormState } from "@/lib/payments";
 
 const initialState: PaymentFormState = { ok: false, error: "" };
@@ -31,6 +32,11 @@ export function PaymentForm({
   const [fileName, setFileName] = useState("");
 
   async function handleSubmit(formData: FormData) {
+    const proof = formData.get("proof");
+    if (proof instanceof File) {
+      const compressed = await compressImageFile(proof);
+      formData.set("proof", compressed, compressed.name);
+    }
     const result = (await formAction(formData)) as unknown as PaymentFormState;
     if (result.ok) router.refresh();
   }

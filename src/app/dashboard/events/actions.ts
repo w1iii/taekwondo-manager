@@ -1,11 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 
 import { requireRole } from "@/lib/auth";
 import { getChapterForUser } from "@/lib/chapters";
 import { db } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { EVENT_ENROLLMENTS_TAG } from "@/lib/enrollments";
 import { EventStatus, PaymentStatus } from "@/generated/prisma/client";
 
 export type EnrollState = { ok: true } | { ok: false; error: string };
@@ -62,6 +63,7 @@ export async function enrollAthletes(formData: FormData): Promise<EnrollState> {
 
   revalidatePath("/dashboard/events");
   revalidatePath(`/dashboard/events/${eventId}`);
+  revalidateTag(EVENT_ENROLLMENTS_TAG, "max");
   return { ok: true };
 }
 
@@ -89,4 +91,5 @@ export async function unenrollAthlete(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/dashboard/events");
+  revalidateTag(EVENT_ENROLLMENTS_TAG, "max");
 }

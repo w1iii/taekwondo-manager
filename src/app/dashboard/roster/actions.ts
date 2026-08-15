@@ -1,11 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 
 import { requireRole } from "@/lib/auth";
 import { getChapterForUser } from "@/lib/chapters";
 import { db } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { EVENT_ENROLLMENTS_TAG } from "@/lib/enrollments";
 import { parseAthleteFormData, type AthleteFormState } from "@/lib/athletes";
 
 export async function createAthlete(formData: FormData): Promise<AthleteFormState> {
@@ -77,4 +78,5 @@ export async function deleteAthlete(formData: FormData): Promise<void> {
   ]);
 
   revalidatePath("/dashboard/roster");
+  revalidateTag(EVENT_ENROLLMENTS_TAG, "max");
 }

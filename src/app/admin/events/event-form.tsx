@@ -7,6 +7,7 @@ import { ImagePlus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { compressImageFile } from "@/lib/client-image";
 import {
   DEFAULT_ENTRY_FEE_PESOS,
   MAX_EVENT_IMAGE_BYTES,
@@ -40,6 +41,11 @@ export function EventForm({
   const [state, formAction, pending] = useActionState(
     async (_prev: EventFormState, formData: FormData) => {
       try {
+        const image = formData.get("image");
+        if (image instanceof File) {
+          const compressed = await compressImageFile(image);
+          formData.set("image", compressed, compressed.name);
+        }
         return await action(formData);
       } catch {
         // Next.js throws before the action runs when the request body exceeds

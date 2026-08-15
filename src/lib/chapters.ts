@@ -59,10 +59,13 @@ export async function claimChapterForUser(user: SessionUser): Promise<void> {
   });
   if (!chapter) return;
 
-  await db.chapter.update({
-    where: { id: chapter.id },
+  // Conditional update: only claims if still unclaimed, so concurrent
+  // dashboard visits (or a claim race between two devices) can't double-claim.
+  const claimed = await db.chapter.updateMany({
+    where: { id: chapter.id, headCoachUserId: null },
     data: { headCoachUserId: user.userId },
   });
+  if (claimed.count === 0) return;
 
   const client = await clerkClient();
   await client.users.updateUserMetadata(user.userId, {

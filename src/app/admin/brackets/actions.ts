@@ -11,6 +11,7 @@ import {
   participantsOf,
 } from "@/lib/brackets";
 import { buildDivisions, athletesInDivision } from "@/lib/divisions";
+import { getEventEnrollments } from "@/lib/enrollments";
 import { EventType } from "@/generated/prisma/client";
 const ALL_EVENT_TYPES = [
   EventType.KYORUGI,
@@ -32,7 +33,7 @@ export async function generateDivisions(formData: FormData): Promise<void> {
   const eventTypes = selected.length > 0 ? selected : [EventType.KYORUGI, EventType.POOMSAE];
 
   const [enrollments, weightClasses] = await Promise.all([
-    db.enrollment.findMany({ where: { eventId }, include: { athlete: true } }),
+    getEventEnrollments(eventId),
     db.weightClass.findMany({ orderBy: [{ gender: "asc" }, { sortOrder: "asc" }] }),
   ]);
 
@@ -73,11 +74,7 @@ export async function generateBracket(formData: FormData): Promise<void> {
   });
   if (!division) return;
 
-  const enrollments = await db.enrollment.findMany({
-    where: { eventId: division.eventId },
-    include: { athlete: true },
-    orderBy: { createdAt: "asc" },
-  });
+  const enrollments = await getEventEnrollments(division.eventId);
 
   const athletes = athletesInDivision(
     {
@@ -106,15 +103,11 @@ export async function generateBracket(formData: FormData): Promise<void> {
       throw error;
     }
 
-    const chapters = await db.enrollment.findMany({
-      where: { eventId: division.eventId },
-      distinct: ["chapterId"],
-      select: { chapterId: true },
-    });
+    const chapterIds = [...new Set(enrollments.map((e) => e.chapterId))];
     await db.notification.createMany({
-      data: chapters.map((c) => ({
+      data: chapterIds.map((chapterId) => ({
         role: "COACH",
-        targetChapterId: c.chapterId,
+        targetChapterId: chapterId,
         title: "Brackets published",
         body: `${division.name} is live for ${division.event.name}.`,
         link: "/dashboard/brackets",
@@ -171,11 +164,18 @@ export async function recordWinner(formData: FormData): Promise<void> {
 
   // Cascade-clear winners downstream (parent and up) so re-deciding an
   // earlier round can never leave a stale result in later rounds.
+  // Build a parent lookup once (childId → parent cell) so the walk is O(n).
+  const parentByChild = new Map<string, (typeof cells)[number]>();
+  for (const cell of cells) {
+    if (cell.childAId) parentByChild.set(cell.childAId, cell);
+    if (cell.childBId) parentByChild.set(cell.childBId, cell);
+  }
+
   const toUpdate = new Set<string>([matchId]);
   const queue = [matchId];
   while (queue.length > 0) {
     const id = queue.pop()!;
-    const parent = cells.find((c) => c.childAId === id || c.childBId === id);
+    const parent = parentByChild.get(id);
     if (parent && parent.winnerAthleteId && !toUpdate.has(parent.id)) {
       toUpdate.add(parent.id);
       queue.push(parent.id);

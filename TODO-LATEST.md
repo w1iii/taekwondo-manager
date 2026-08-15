@@ -93,27 +93,31 @@ Production-readiness work items from full-stack audit (2026-08-14).
 ## P2 — MEDIUM (next iteration)
 
 ### P2-1 Bracket generation efficiency
-- [ ] `generateBracket` re-queries ALL event enrollments per division — cache enrollments once per event, reuse across divisions
-- [ ] `recordWinner` cascade is O(cells²) — build parent map once, walk it
+- [x] `generateBracket` re-queries ALL event enrollments per division — cache enrollments once per event, reuse across divisions
+- [x] `recordWinner` cascade is O(cells²) — build parent map once, walk it
 - **Files:** `src/app/admin/brackets/actions.ts`
 - **Effort:** ~1–2 hr
+- **Done:** new `src/lib/enrollments.ts` — `getEventEnrollments(eventId)` via `unstable_cache` (tag `event-enrollments`, 1h TTL), used by `generateDivisions` and `generateBracket` so the query runs once per event instead of once per division. Chapter IDs for bracket-published notifications derived from the same cached rows (dropped the second `findMany`). Cache invalidated (`revalidateTag(EVENT_ENROLLMENTS_TAG, "max")`) on `enrollAthletes`, `unenrollAthlete`, `deleteAthlete`. `recordWinner` now builds a `parentByChild` Map once and walks it — O(n) instead of O(cells²) `cells.find` per hop.
 
 ### P2-2 Upload pipeline
-- [ ] Resize/compress images before Cloudinary upload (15MB originals stored today)
-- [ ] Consider client-side compression for payment proofs
-- [ ] Add cache headers to `/uploads/[...path]` route (local fallback)
+- [x] Resize/compress images before Cloudinary upload (15MB originals stored today)
+- [x] Consider client-side compression for payment proofs
+- [x] Add cache headers to `/uploads/[...path]` route (local fallback)
 - **Files:** `src/lib/uploads.ts`, `src/app/uploads/[...path]/route.ts`
 - **Effort:** ~2 hr
+- **Done:** `src/lib/client-image.ts` — `compressImageFile()` downscales to max 1600px in the browser (canvas + `createImageBitmap`), returns original if already small/undecodable, never grows the file. Wired into `PaymentForm` (proof) and `EventForm` (event image). Server backstop in `saveUpload`: Cloudinary `transformation: [{ crop: "limit", width: 1600, height: 1600 }]` caps stored dimensions for any upload that skips client compression. `/uploads/[...path]` route now sends `Cache-Control: public, max-age=31536000, immutable` (UUID filenames are content-addressed).
 
 ### P2-3 Dashboard overview page — finish placeholder cards
-- [ ] Real athlete count, payment status, next tournament (currently hardcoded "0", "—", "—")
+- [x] Real athlete count, payment status, next tournament (currently hardcoded "0", "—", "—")
 - **Files:** `src/app/dashboard/page.tsx`
 - **Effort:** ~1 hr
+- **Done:** athlete count via `db.athlete.count({ chapterId })`; payment status card reads the chapter's latest non-rejected payment (badge + ₱ per-athlete hint, with "Not submitted" state); next tournament card shows the next published event (name, date, location, link). All three query in parallel; placeholder branches kept when no chapter/event exists.
 
 ### P2-4 `claimChapterForUser` race
-- [ ] Guard concurrent claims (transaction or conditional update)
+- [x] Guard concurrent claims (transaction or conditional update)
 - **Files:** `src/lib/chapters.ts`
 - **Effort:** ~30 min
+- **Done:** claim now uses `updateMany({ where: { id, headCoachUserId: null } })` and only writes Clerk metadata when `count === 1` — a concurrent dashboard visit or second device can't double-claim or clobber another coach's link.
 
 ### P2-5 Tests
 - [ ] Unit: `bracket-core`, `division-core`, form parsers
@@ -157,5 +161,7 @@ Phase 2 (week 1):         P1-1 → P1-2 → P1-4 → P1-5
 Phase 3 (week 2):         P1-3 → P1-6 → P2-1 → P2-2
 Phase 4 (week 3+):        P2-3 → P2-4 → P2-5 → P3-*
 ```
+
+**Done:** P0 all · P1 all · P2-1, P2-2, P2-3, P2-4 (2026-08-15). Remaining: P2-5 tests, P3-* backlog.
 
 Say **"implement P0"** / **"implement P1"** / etc. and I'll start on that section.

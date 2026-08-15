@@ -35,7 +35,12 @@ export async function GET(
   try {
     const data = await readFile(filePath);
     return new Response(data, {
-      headers: { "Content-Type": MIME[ext] ?? "application/octet-stream" },
+      headers: {
+        "Content-Type": MIME[ext] ?? "application/octet-stream",
+        // Local fallback files are content-addressed (random UUID filename),
+        // so they never change in place — safe to cache aggressively.
+        "Cache-Control": "public, max-age=31536000, immutable",
+      },
     });
   } catch {
     return new Response("Not found", { status: 404 });
