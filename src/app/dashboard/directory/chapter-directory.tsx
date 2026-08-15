@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
 import { Building2, MapPin, Search, Users } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PROVINCES } from "@/lib/provinces";
 
@@ -15,53 +16,69 @@ export type ChapterSummary = {
   headCoachName: string;
 };
 
-export function ChapterDirectory({ chapters }: { chapters: ChapterSummary[] }) {
-  const [query, setQuery] = useState("");
-  const [province, setProvince] = useState("");
-
-  const filtered = chapters.filter((c) => {
-    const matchesQuery =
-      query.trim() === "" ||
-      c.name.toLowerCase().includes(query.trim().toLowerCase()) ||
-      c.city.toLowerCase().includes(query.trim().toLowerCase());
-    const matchesProvince = province === "" || c.province === province;
-    return matchesQuery && matchesProvince;
-  });
-
+export function ChapterDirectory({
+  chapters,
+  query,
+  province,
+}: {
+  chapters: ChapterSummary[];
+  query: string;
+  province: string;
+}) {
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <form
+        method="get"
+        action="/dashboard/directory"
+        className="flex flex-col gap-3 sm:flex-row"
+      >
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            type="search"
+            name="q"
+            defaultValue={query}
             placeholder="Search by chapter or city"
             className="pl-8"
           />
         </div>
-        <select
-          value={province}
-          onChange={(e) => setProvince(e.target.value)}
-          aria-label="Filter by province"
-          className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:w-56"
-        >
-          <option value="">All provinces</option>
-          {PROVINCES.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
-      </div>
+        <div className="flex items-center gap-2">
+          <select
+            name="province"
+            defaultValue={province}
+            aria-label="Filter by province"
+            onChange={(e) => e.currentTarget.form?.requestSubmit()}
+            className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:w-56"
+          >
+            <option value="">All provinces</option>
+            {PROVINCES.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+          <Button type="submit" size="sm">
+            Search
+          </Button>
+          {query || province ? (
+            <Button
+              render={<Link href="/dashboard/directory" />}
+              variant="outline"
+              size="sm"
+            >
+              Clear
+            </Button>
+          ) : null}
+        </div>
+      </form>
 
-      {filtered.length === 0 ? (
+      {chapters.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">
           No chapters match your filters.
         </p>
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2">
-          {filtered.map((c) => (
+          {chapters.map((c) => (
             <li
               key={c.id}
               className="flex items-center gap-3 rounded-lg border bg-card p-4"
