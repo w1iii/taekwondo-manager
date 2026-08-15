@@ -101,6 +101,10 @@ add them behind secrets if you want them in CI.
 
 ## Operations notes
 
+- Analytics: page views are tracked in-DB (see `/admin/analytics`, roles-only).
+  The beacon (`/api/analytics/view`, mounted in the root layout) is
+  fire-and-forget and writes one `PageView` row per load — best-effort, so it
+  can never break navigation or auth.
 - Rate limits (in-DB fixed window, see `src/lib/rate-limit.ts`) apply per user
   to `enrollAthletes`, `submitPayment`, `registerChapter`, `createAthlete`.
 - Caches: event/bracket/chapter reads are cached with tags

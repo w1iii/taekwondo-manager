@@ -17,6 +17,7 @@ export type TestCoach = {
 /** Wipes all tables in FK-safe order. Run in beforeEach. */
 export async function resetDb(): Promise<void> {
   await db.$transaction([
+    db.pageView.deleteMany({}),
     db.rateLimit.deleteMany({}),
     db.notification.deleteMany({}),
     db.bracketCell.deleteMany({}),

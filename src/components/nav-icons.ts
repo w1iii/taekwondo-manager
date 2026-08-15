@@ -1,5 +1,6 @@
 import {
   Award,
+  BarChart3,
   Building2,
   CalendarPlus,
   LayoutDashboard,
@@ -12,6 +13,7 @@ import {
 
 export const navIcons = {
   Award,
+  BarChart3,
   Building2,
   CalendarPlus,
   LayoutDashboard,

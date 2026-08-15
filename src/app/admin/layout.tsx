@@ -11,6 +11,7 @@ const nav: NavItem[] = [
   { href: "/admin/payments", label: "Payments", icon: "ReceiptText" },
   { href: "/admin/athletes", label: "Athletes", icon: "Award" },
   { href: "/admin/brackets", label: "Brackets", icon: "Network" },
+  { href: "/admin/analytics", label: "Analytics", icon: "BarChart3" },
 ];
 
 export default async function AdminLayout({

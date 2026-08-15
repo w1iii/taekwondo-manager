@@ -227,3 +227,18 @@ model RateLimit {
 
   @@index([windowStart])
 }
+
+// Lightweight usage analytics: one row per page view recorded by the client
+// beacon. role/userId are null for anonymous (public) views. Kept coarse —
+// dashboard/analytics aggregates counts, never per-visitor PII detail.
+model PageView {
+  id        String   @id @default(cuid())
+  path      String
+  role      Role?
+  userId    String?
+  chapterId String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([path, createdAt])
+}

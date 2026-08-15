@@ -149,8 +149,9 @@ Production-readiness work items from full-stack audit (2026-08-14).
 - **Done:** (1) Notification fan-out for event publish rewritten as a single raw `INSERT…SELECT FROM "Chapter" WHERE status = 'APPROVED'` (`src/app/admin/events/actions.ts`) — no in-memory chapter list, O(1) client work at any scale. Covered by a new integration test (`setEventStatus` fans out to exactly the approved chapters, not PENDING/REJECTED). (2) `src/components/live-brackets-refresh.tsx` — a `use client` component on the coach brackets page that calls `router.refresh()` every 15s via RSC refresh (no full page reload), pauses on hidden tabs, and respects `prefers-reduced-motion`. It re-reads the same `unstable_cache` tags, so revalidation from `recordWinner`/`generateBracket` surfaces automatically. Deliberately NOT added to the admin brackets page — directors click through match controls and a mid-click refresh would disrupt them.
 
 ### P3-4 Analytics
-- [ ] Basic usage analytics (page views, registration funnel)
+- [x] Basic usage analytics (page views, registration funnel)
 - **Effort:** ~1 hr
+- **Done:** Lightweight self-hosted analytics — no external SaaS. New `PageView` model (path, role, userId, chapterId, createdAt; indexes on `createdAt` + `path/createdAt`) + migration `20260815093428_add_page_views`. `src/components/track-page-views.tsx` (mounted in root layout) beacons every route change via `navigator.sendBeacon`; `src/app/api/analytics/view/route.ts` records it auth-aware (role mapped to the DB enum, query/hash stripped, max 200 chars, fire-and-forget). `src/app/admin/analytics/page.tsx` shows 30-day page views, unique visitors, anonymized top pages (dynamic segments collapsed to `[id]`), and a registration funnel (chapters → approved → athletes → enrollments → payments → approved). Nav link added with a new `BarChart3` icon. `resetDb` now also wipes `PageView`. 4 new integration tests for the beacon (anonymous, signed-in + query stripping, 400 on bad body, organizer role). Build/lint/tsc/87 vitest/9 E2E all pass. Caveat: the analytics route is intentionally best-effort (swallows errors); it writes one row per page load — fine at this scale, batch/aggregate later if traffic grows.
 
 ### P3-5 Backup/DR verification
 - [ ] Confirm Neon backup schedule + test restore
@@ -167,6 +168,6 @@ Phase 3 (week 2):         P1-3 → P1-6 → P2-1 → P2-2
 Phase 4 (week 3+):        P2-3 → P2-4 → P2-5 → P3-*
 ```
 
-**Done:** P0 all · P1 all · P2-1…P2-4 (2026-08-15) · P2-5 all tiers (unit + integration + E2E, 2026-08-15) · P3-1 CI/CD · P3-2 image optimization · P3-3 notification fan-out (2026-08-15). Remaining: P3-4…P3-5 backlog.
+**Done:** P0 all · P1 all · P2-1…P2-4 (2026-08-15) · P2-5 all tiers (unit + integration + E2E, 2026-08-15) · P3-1 CI/CD · P3-2 image optimization · P3-3 notification fan-out · P3-4 analytics (2026-08-15). Remaining: P3-5 backlog.
 
 Say **"implement P0"** / **"implement P1"** / etc. and I'll start on that section.
