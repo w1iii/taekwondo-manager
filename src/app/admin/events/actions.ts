@@ -44,8 +44,10 @@ export async function createEvent(formData: FormData): Promise<EventFormState> {
   }
 
   revalidateTag("events-published", "max");
+  revalidatePath("/");
   revalidatePath("/admin/events");
   revalidatePath("/admin");
+  revalidatePath("/dashboard/events");
   redirect("/admin/events");
 }
 
@@ -87,8 +89,10 @@ export async function updateEvent(formData: FormData): Promise<EventFormState> {
   }
 
   revalidateTag("events-published", "max");
+  revalidatePath("/");
   revalidatePath("/admin/events");
   revalidatePath("/admin");
+  revalidatePath("/dashboard/events");
   redirect("/admin/events");
 }
 
@@ -108,6 +112,7 @@ export async function deleteEvent(formData: FormData): Promise<void> {
   }
 
   revalidateTag("events-published", "max");
+  revalidatePath("/");
   revalidatePath("/admin/events");
   revalidatePath("/admin");
   revalidatePath("/admin/brackets");
@@ -148,6 +153,8 @@ export async function setEventStatus(formData: FormData): Promise<void> {
   }
 
   revalidateTag("events-published", "max");
+  revalidatePath("/");
   revalidatePath("/admin/events");
   revalidatePath("/admin");
+  revalidatePath("/dashboard/events");
 }
