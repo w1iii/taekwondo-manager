@@ -19,75 +19,86 @@ export type MatchDescriptor = {
   winnerAthleteId: string | null;
 };
 
-/* ── Dark theme palette (self-contained, matches template) ── */
-const C = {
-  bg: "#0f1117",
-  cardBg: "#1e2433",
-  cardBorder: "#2d3748",
-  winBg: "#1a2a1e",
-  winBorder: "#2d6a4f",
-  winText: "#4ade80",
-  text: "#cbd5e1",
-  muted: "#94a3b8",
-  dim: "#475569",
-  champBg: "#1c1708",
-  champBorder: "#92400e",
-  champText: "#fbbf24",
-  connector: "#2d3748",
-  champConnector: "#92400e",
+/* ── Light theme (matches app background via CSS vars) ── */
+const THEME = {
+  panelBg: "var(--muted)",
+  cardBg: "var(--card)",
+  border: "var(--border)",
+  text: "var(--foreground)",
+  muted: "var(--muted-foreground)",
+  accent: "var(--primary)",
+  scoreBg: "var(--muted)",
+  winnerSlotBg: "rgba(142, 14, 21, 0.05)",
+  verified: "#22c55e",
+  unverified: "#f59e0b",
+  mono: "var(--font-mono)",
 } as const;
 
 /* ── Layout constants ── */
-const SEED_H = 36;
-const MATCH_H = SEED_H * 2 + 4; // 76px per match (2 seeds + gap)
-const CONNECTOR_W = 40;
-const ROUND_GAP = 12;
-const BRACKET_H = 500;
+const CARD_W = 168;
+const SLOT_H = 32;
+const CARD_H = SLOT_H * 2 + 3;
+const CONNECTOR_W = 28;
+const MIN_GAP = 88;
+const LABEL_H = 24;
+
+function roundCenters(count: number, total: number): number[] {
+  const top = (total - count * CARD_H - (count - 1) * MIN_GAP) / 2;
+  return Array.from(
+    { length: count },
+    (_, i) => top + CARD_H / 2 + i * (CARD_H + MIN_GAP),
+  );
+}
 
 /* ── Seed slot ── */
-function Seed({
+function Slot({
   num,
   name,
   score,
   isWinner,
   isVerified,
+  divider,
 }: {
   num?: number;
   name: string;
   score?: number;
   isWinner: boolean;
   isVerified?: boolean;
+  divider?: boolean;
 }) {
-  const bg = isWinner ? C.winBg : C.cardBg;
-  const border = isWinner ? C.winBorder : C.cardBorder;
-  const textColor = isWinner ? C.winText : C.text;
-  const numColor = isWinner ? C.winBorder : C.dim;
-  const scoreColor = isWinner ? C.winText : C.muted;
-
   return (
     <div
       style={{
+        position: "relative",
         display: "flex",
         alignItems: "center",
-        gap: 8,
-        height: SEED_H,
-        padding: "0 12px",
-        background: bg,
-        border: `1px solid ${border}`,
-        borderBottom: "none",
-        color: textColor,
-        position: "relative",
-        fontSize: 13,
-        borderRadius: 0,
+        gap: 6,
+        height: SLOT_H,
+        padding: "0 8px",
+        background: isWinner ? THEME.winnerSlotBg : "transparent",
+        borderBottom: divider ? `1px solid ${THEME.border}` : "none",
       }}
     >
+      {isWinner && (
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 2,
+            background: THEME.accent,
+          }}
+        />
+      )}
       {num !== undefined && (
         <span
           style={{
-            fontSize: 10,
+            fontFamily: THEME.mono,
+            fontSize: 9,
             fontWeight: 700,
-            color: numColor,
-            minWidth: 14,
+            color: THEME.muted,
+            minWidth: 12,
             textAlign: "right",
           }}
         >
@@ -100,6 +111,9 @@ function Seed({
           whiteSpace: "nowrap",
           overflow: "hidden",
           textOverflow: "ellipsis",
+          fontSize: 12,
+          color: isWinner ? THEME.text : THEME.muted,
+          fontWeight: isWinner ? 700 : 400,
         }}
       >
         {name}
@@ -108,16 +122,28 @@ function Seed({
         <span
           title={isVerified ? "Chapter payment approved" : "Payment pending approval"}
           style={{
-            width: 6,
-            height: 6,
+            width: 5,
+            height: 5,
             borderRadius: "50%",
-            background: isVerified ? "#4ade80" : "#facc15",
+            background: isVerified ? THEME.verified : THEME.unverified,
             flexShrink: 0,
           }}
         />
       )}
       {score !== undefined && (
-        <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 700, color: scoreColor }}>
+        <span
+          style={{
+            background: THEME.scoreBg,
+            padding: "1px 6px",
+            borderRadius: 3,
+            fontFamily: THEME.mono,
+            fontSize: 12,
+            fontWeight: 700,
+            color: isWinner ? THEME.accent : THEME.muted,
+            minWidth: 18,
+            textAlign: "center",
+          }}
+        >
           {score}
         </span>
       )}
@@ -125,7 +151,7 @@ function Seed({
   );
 }
 
-/* ── Match wrapper: 2 seeds stacked ── */
+/* ── Match card ── */
 function Match({
   top,
   bot,
@@ -138,84 +164,66 @@ function Match({
   descriptor?: MatchDescriptor;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", width: 160 }}>
-      <Seed
-        num={top.num}
-        name={top.name}
-        score={top.score}
-        isWinner={top.isWinner}
-        isVerified={top.isVerified}
-      />
-      <Seed
-        num={bot.num}
-        name={bot.name}
-        score={bot.score}
-        isWinner={bot.isWinner}
-        isVerified={bot.isVerified}
-      />
+    <div
+      style={{
+        width: CARD_W,
+        background: THEME.cardBg,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 6,
+        overflow: "hidden",
+      }}
+    >
+      <Slot num={top.num} name={top.name} score={top.score} isWinner={top.isWinner} isVerified={top.isVerified} divider />
+      <Slot num={bot.num} name={bot.name} score={bot.score} isWinner={bot.isWinner} isVerified={bot.isVerified} />
       {matchControls && descriptor && (
-        <div style={{ padding: "4px 0", fontSize: 12 }}>{matchControls(descriptor)}</div>
+        <div style={{ padding: "4px 8px", borderTop: `1px solid ${THEME.border}`, fontSize: 11 }}>
+          {matchControls(descriptor)}
+        </div>
       )}
     </div>
   );
 }
 
-/* ── SVG connector between two rounds ── */
+/* ── Connector between two rounds ── */
 function Connector({
-  fromCount,
-  toCount,
+  fromYs,
+  toYs,
+  isChampion,
 }: {
-  fromCount: number;
-  toCount: number;
+  fromYs: number[];
+  toYs: number[];
+  isChampion?: boolean;
 }) {
-  const totalH = BRACKET_H;
-  const fromGap = fromCount > 1 ? (totalH - fromCount * MATCH_H) / (fromCount - 1) : 0;
-  const toGap = toCount > 1 ? (totalH - toCount * MATCH_H) / (toCount - 1) : 0;
-
-  // Y positions of match midpoints in the "from" round
-  const fromYs = Array.from({ length: fromCount }, (_, i) => {
-    const top = i * (MATCH_H + fromGap);
-    return top + SEED_H; // midpoint between the 2 seeds
-  });
-
-  // Y positions where connectors arrive in the "to" round
-  const toYs = Array.from({ length: toCount }, (_, i) => {
-    if (toCount === 1) return totalH / 2;
-    const top = i * (MATCH_H + toGap);
-    return top + SEED_H;
-  });
-
-  const paths: string[] = [];
   const midX = CONNECTOR_W / 2;
-
-  for (let t = 0; t < toCount; t++) {
-    const y1 = fromYs[t * 2];
-    const y2 = fromYs[t * 2 + 1];
-    const yMid = toYs[t];
-    const sw = 1;
-
-    // top branch: horizontal out → vertical down → horizontal in
-    paths.push(`<line x1="0" y1="${y1}" x2="${midX}" y2="${y1}" stroke="${C.connector}" stroke-width="${sw}"/>`);
-    paths.push(`<line x1="${midX}" y1="${y1}" x2="${midX}" y2="${yMid}" stroke="${C.connector}" stroke-width="${sw}"/>`);
-    // bottom branch
-    paths.push(`<line x1="0" y1="${y2}" x2="${midX}" y2="${y2}" stroke="${C.connector}" stroke-width="${sw}"/>`);
-    paths.push(`<line x1="${midX}" y1="${y2}" x2="${midX}" y2="${yMid}" stroke="${C.connector}" stroke-width="${sw}"/>`);
-    // horizontal into next round
-    paths.push(`<line x1="${midX}" y1="${yMid}" x2="${CONNECTOR_W}" y2="${yMid}" stroke="${C.connector}" stroke-width="${sw}"/>`);
+  const d: string[] = [];
+  if (isChampion && fromYs.length === 1) {
+    const y = fromYs[0];
+    d.push(`M0 ${y} H ${CONNECTOR_W}`);
+  } else {
+    for (let t = 0; t < toYs.length; t++) {
+      const y1 = fromYs[2 * t];
+      const y2 = fromYs[2 * t + 1];
+      const ym = toYs[t];
+      d.push(
+        `M0 ${y1} H ${midX}`,
+        `M ${midX} ${y1} V ${ym}`,
+        `M0 ${y2} H ${midX}`,
+        `M ${midX} ${y2} V ${ym}`,
+        `M ${midX} ${ym} H ${CONNECTOR_W}`,
+      );
+    }
   }
-
   return (
-    <div
-      style={{
-        width: CONNECTOR_W,
-        flexShrink: 0,
-        marginTop: 31,
-      }}
-    >
-      <svg width={CONNECTOR_W} height={totalH} style={{ display: "block" }}>
-        {paths.map((d, i) => (
-          <g key={i} dangerouslySetInnerHTML={{ __html: d }} />
-        ))}
+    <div style={{ width: CONNECTOR_W, flexShrink: 0, display: "flex", flexDirection: "column" }}>
+      <div style={{ height: LABEL_H, flexShrink: 0 }} />
+      <svg width={CONNECTOR_W} style={{ display: "block", flex: 1 }}>
+        <path
+          d={d.join(" ")}
+          fill="none"
+          stroke={isChampion ? THEME.accent : THEME.border}
+          strokeWidth={1.5}
+          strokeLinecap="round"
+        />
       </svg>
     </div>
   );
@@ -249,76 +257,74 @@ export function BracketView({
   const matches = cells.filter((c) => c.childAId || c.childBId);
   if (matches.length === 0) return null;
 
-  const maxMatchRound = Math.max(...matches.map((m) => m.round));
-  const columnCount = maxMatchRound + 1;
-
-  // Build columns: index 0 = earliest round, last = final
-  const columns = Array.from({ length: columnCount }, (_, colIdx) => {
-    const round = colIdx;
-    const roundMatches = matches
+  const rounds = [...new Set(matches.map((m) => m.round))].sort((a, b) => b - a);
+  const columns = rounds.map((round) => ({
+    round,
+    roundMatches: matches
       .filter((m) => m.round === round)
-      .sort((a, b) => a.position - b.position);
-    return { round, roundMatches };
-  });
+      .sort((a, b) => a.position - b.position),
+  }));
 
-  // Determine champion from the final round
-  const finalCell = cells.find((c) => c.round === 0 && (c.childAId || c.childBId));
-  const championId = finalCell?.winnerAthleteId ?? null;
+  const firstCount = columns[0].roundMatches.length;
+  const totalH = firstCount * CARD_H + (firstCount - 1) * MIN_GAP;
+
+  const championId = cells.find(
+    (c) => c.round === 0 && (c.childAId || c.childBId),
+  )?.winnerAthleteId ?? null;
   const championName = championId ? nameById[championId] ?? "—" : null;
 
   return (
     <div
       style={{
-        background: C.bg,
-        borderRadius: 12,
-        padding: "32px 24px",
+        width: "100%",
+        maxWidth: "100%",
         overflowX: "auto",
+        background: THEME.panelBg,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 12,
+        padding: "28px 20px",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 0,
-          minWidth: "max-content",
-        }}
-      >
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 20, minWidth: "max-content" }}>
         {columns.map(({ round, roundMatches }, colIdx) => {
-          const matchCount = roundMatches.length;
-          const gap =
-            matchCount > 1 ? (BRACKET_H - matchCount * MATCH_H) / (matchCount - 1) : 0;
+          const centers = roundCenters(roundMatches.length, totalH);
+          const isFinal = roundMatches.length === 1;
+          const labelColor = isFinal ? THEME.accent : THEME.muted;
+
+          const nextCenters = roundCenters(
+            columns[colIdx + 1]?.roundMatches.length ?? 0,
+            totalH,
+          );
 
           return (
-            <div key={round} style={{ display: "flex", gap: 0 }}>
+            <div key={round} style={{ display: "flex", alignItems: "flex-start", gap: 20 }}>
               {/* Round column */}
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                 <div
                   style={{
-                    fontSize: 11,
-                    fontWeight: 600,
+                    height: LABEL_H,
+                    display: "flex",
+                    alignItems: "center",
+                    fontFamily: THEME.mono,
+                    fontSize: 10,
+                    fontWeight: 700,
                     letterSpacing: "0.08em",
                     textTransform: "uppercase",
-                    color: C.dim,
-                    marginBottom: 20,
+                    color: labelColor,
                     whiteSpace: "nowrap",
+                    padding: "0 4px",
                   }}
                 >
-                  {roundLabel(maxMatchRound - round)}
+                  {roundLabel(Math.log2(roundMatches.length))}
                 </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: matchCount === 1 ? "center" : "flex-start",
-                    height: BRACKET_H,
-                  }}
-                >
+                <div style={{ position: "relative", width: CARD_W, height: totalH, flexShrink: 0 }}>
                   {roundMatches.map((match, i) => {
                     const sideA = resolveSide(match.childAId);
                     const sideB = resolveSide(match.childBId);
                     const topWin = match.winnerAthleteId === sideA?.athleteId;
                     const botWin = match.winnerAthleteId === sideB?.athleteId;
-                    const marginTop = i === 0 ? 0 : gap;
+                    const topNum = seedNum(byId, match.childAId);
+                    const botNum = seedNum(byId, match.childBId);
 
                     const descriptor: MatchDescriptor = {
                       cellId: match.id,
@@ -328,14 +334,24 @@ export function BracketView({
                     };
 
                     return (
-                      <div key={match.id} style={{ marginTop }}>
+                      <div
+                        key={match.id}
+                        style={{
+                          position: "absolute",
+                          top: centers[i] - CARD_H / 2,
+                          left: 0,
+                          width: CARD_W,
+                        }}
+                      >
                         <Match
                           top={{
+                            num: topNum,
                             name: sideA?.name ?? "—",
                             isWinner: topWin,
                             isVerified: sideA ? verifiedById?.[sideA.athleteId] : undefined,
                           }}
                           bot={{
+                            num: botNum,
                             name: sideB?.name ?? "—",
                             isWinner: botWin,
                             isVerified: sideB ? verifiedById?.[sideB.athleteId] : undefined,
@@ -349,74 +365,80 @@ export function BracketView({
                 </div>
               </div>
 
-              {/* Connector to next round (or to champion) */}
+              {/* Connector to next round or champion */}
               {colIdx < columns.length - 1 ? (
-                <Connector
-                  fromCount={matchCount}
-                  toCount={columns[colIdx + 1].roundMatches.length}
-                />
+                <Connector fromYs={centers} toYs={nextCenters} />
               ) : (
-                /* Final connector → champion */
-                <div style={{ width: CONNECTOR_W, flexShrink: 0, marginTop: 31 }}>
-                  <svg width={CONNECTOR_W} height={BRACKET_H} style={{ display: "block" }}>
-                    <line
-                      x1="0"
-                      y1={BRACKET_H / 2}
-                      x2={CONNECTOR_W}
-                      y2={BRACKET_H / 2}
-                      stroke={C.champConnector}
-                      strokeWidth={1}
-                    />
-                  </svg>
-                </div>
+                <Connector fromYs={[centers[0]]} toYs={[]} isChampion />
               )}
             </div>
           );
         })}
 
         {/* Champion slot */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 8,
-            marginLeft: 40,
-          }}
-        >
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
           <div
             style={{
-              fontSize: 11,
-              fontWeight: 600,
+              height: LABEL_H,
+              display: "flex",
+              alignItems: "center",
+              fontFamily: THEME.mono,
+              fontSize: 10,
+              fontWeight: 700,
               letterSpacing: "0.08em",
               textTransform: "uppercase",
-              color: C.champText,
-              marginBottom: 4,
+              color: THEME.accent,
+              whiteSpace: "nowrap",
             }}
           >
             Champion
           </div>
-          <div
-            style={{
-              width: 160,
-              height: 52,
-              borderRadius: 8,
-              background: C.champBg,
-              border: `1px solid ${C.champBorder}`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              fontWeight: 700,
-              fontSize: 14,
-              color: C.champText,
-            }}
-          >
-            <span style={{ fontSize: 18 }}>🏆</span>
-            <span>{championName ?? "—"}</span>
+          <div style={{ position: "relative", width: CARD_W, height: totalH }}>
+            <div
+              style={{
+                position: "absolute",
+                top: totalH / 2 - CARD_H / 2,
+                left: 0,
+                width: CARD_W,
+                height: CARD_H,
+                border: `1px dashed ${THEME.accent}`,
+                borderRadius: 6,
+                background: THEME.cardBg,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                padding: "0 8px",
+              }}
+            >
+              <span style={{ fontSize: 15 }}>🏆</span>
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: THEME.text,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {championName ?? "—"}
+              </span>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+function seedNum(
+  byId: Map<string, Cell>,
+  cellId: string | null | undefined,
+): number | undefined {
+  if (!cellId) return undefined;
+  const cell = byId.get(cellId);
+  if (!cell?.athleteId) return undefined;
+  if (cell.childAId || cell.childBId) return undefined;
+  return cell.position + 1;
 }

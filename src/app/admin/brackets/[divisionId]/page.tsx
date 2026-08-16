@@ -126,18 +126,19 @@ export default async function DivisionBracketPage({
         />
       )}
 
-      <section className="space-y-3">
-        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          <Users className="size-4" />
-          Players · {participants.length}
-        </h2>
-        {participants.length === 0 ? (
-          <Card>
-            <CardContent className="text-sm text-muted-foreground">
-              No players in this division yet.
-            </CardContent>
-          </Card>
-        ) : (
+      {cells.length === 0 && (
+        <section className="space-y-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            <Users className="size-4" />
+            Players · {participants.length}
+          </h2>
+          {participants.length === 0 ? (
+            <Card>
+              <CardContent className="text-sm text-muted-foreground">
+                No players in this division yet.
+              </CardContent>
+            </Card>
+          ) : (
           <ul className="overflow-hidden rounded-lg border bg-card">
             {participants.map((athlete) => (
               <li
@@ -158,8 +159,9 @@ export default async function DivisionBracketPage({
               </li>
             ))}
           </ul>
-        )}
-      </section>
+          )}
+        </section>
+      )}
     </div>
   );
 }
