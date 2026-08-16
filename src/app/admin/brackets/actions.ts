@@ -122,6 +122,7 @@ export async function generateBracket(formData: FormData): Promise<void> {
   revalidateTag("brackets-cells", "max");
   revalidatePath("/admin/brackets");
   revalidatePath(`/admin/brackets/events/${division.eventId}`);
+  revalidatePath(`/admin/brackets/events/${division.eventId}/divisions`);
   revalidatePath(`/admin/brackets/${divisionId}`);
   revalidatePath("/dashboard/brackets");
   revalidatePath(`/dashboard/brackets/${division.eventId}`);

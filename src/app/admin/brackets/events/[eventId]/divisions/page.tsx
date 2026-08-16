@@ -14,7 +14,7 @@ import { athletesInDivision, EVENT_TYPE_LABELS } from "@/lib/divisions";
 import { beltLabel, genderLabel } from "@/lib/athletes";
 import { EventStatus } from "@/generated/prisma/client";
 import { ActionButton } from "@/components/action-button";
-import { generateDivisions } from "../../../actions";
+import { generateDivisions, generateBracket } from "../../../actions";
 import { pageCount, clampPage, parsePage, toSearchParams } from "@/lib/pagination";
 
 export const metadata = { title: "Event divisions" };
@@ -247,6 +247,12 @@ export default async function DivisionsPage({
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     {hasBracket ? (
                       <Badge variant="secondary">Bracket ready</Badge>
+                    ) : null}
+                    {!hasBracket ? (
+                      <form action={generateBracket}>
+                        <input type="hidden" name="divisionId" value={division.id} />
+                        <ActionButton label="Generate bracket" size="sm" />
+                      </form>
                     ) : null}
                     <Button
                       render={<Link href={`/admin/brackets/${division.id}`} />}

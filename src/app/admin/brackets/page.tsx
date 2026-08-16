@@ -8,7 +8,6 @@ import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatDate } from "@/lib/events";
 import { EventStatus } from "@/generated/prisma/client";
-import { unstable_cache } from "next/cache";
 
 export const metadata = { title: "Brackets" };
 
@@ -41,14 +40,10 @@ async function getAdminBracketsEvents() {
   }));
 }
 
-const getCachedAdminBracketsEvents = unstable_cache(getAdminBracketsEvents, ["admin-brackets-events"], {
-  tags: ["events-published"],
-});
-
 export default async function BracketsAdminPage() {
   await requireRole("organizer");
 
-  const events = await getCachedAdminBracketsEvents();
+  const events = await getAdminBracketsEvents();
 
   const divisionIds = events.flatMap((e) => e.divisions.map((d) => d.id));
   const cellCounts = await db.bracketCell.groupBy({

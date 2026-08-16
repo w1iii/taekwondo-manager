@@ -158,12 +158,10 @@ async function main() {
   }
 
   const playersArg = process.argv.find((a) => a.startsWith("--players="));
-  if (playersArg) {
-    const players = Number(playersArg.split("=")[1]);
-    if (Number.isFinite(players) && players > 0) {
-      await seedPlayers(players);
-      return;
-    }
+  const players = playersArg ? Number(playersArg.split("=")[1]) : 16;
+  if (Number.isFinite(players) && players > 0) {
+    await seedPlayers(players);
+    return;
   }
 
   const chapters = await prisma.chapter.findMany({
@@ -290,13 +288,23 @@ async function seedPlayers(players: number) {
     return;
   }
 
-  const event = await prisma.event.findFirst({
+  let event = await prisma.event.findFirst({
     where: { status: EventStatus.PUBLISHED },
     orderBy: { eventDate: "asc" },
   });
   if (!event) {
-    console.log("No PUBLISHED event — aborting player seed.");
-    return;
+    event = await prisma.event.create({
+      data: {
+        name: "2026 National Taekwondo Championships",
+        description: "Annual national taekwondo competition",
+        location: "Philippine Arena, Bulacan",
+        eventDate: new Date("2026-09-15"),
+        registrationDeadline: new Date("2026-08-30T23:59:59Z"),
+        entryFeePesos: 500,
+        status: EventStatus.PUBLISHED,
+      },
+    });
+    console.log(`Created sample event: "${event.name}" (${event.id})`);
   }
 
   await prisma.approvedAthlete.deleteMany({});
