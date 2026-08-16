@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Receipt } from "lucide-react";
@@ -28,24 +28,29 @@ export function PaymentForm({
   );
   const router = useRouter();
   const [fileName, setFileName] = useState("");
+  const compressedFileRef = useRef<File | null>(null);
 
   useEffect(() => {
     if (state.ok) router.refresh();
   }, [state.ok, router]);
 
-  async function handleSubmit(formData: FormData) {
-    const proof = formData.get("proof");
-    if (proof instanceof File) {
-      const compressed = await compressImageFile(proof);
-      formData.set("proof", compressed, compressed.name);
-    }
-    startTransition(() => {
-      formAction(formData);
-    });
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    compressedFileRef.current = await compressImageFile(file);
   }
 
   return (
-    <form action={handleSubmit} className="space-y-4">
+    <form
+      action={async (formData) => {
+        if (compressedFileRef.current) {
+          formData.set("proof", compressedFileRef.current, compressedFileRef.current.name);
+        }
+        await formAction(formData);
+      }}
+      className="space-y-4"
+    >
       <input type="hidden" name="orderId" value={orderId} />
 
       <div className="space-y-1.5">
@@ -69,7 +74,7 @@ export function PaymentForm({
           type="file"
           accept="image/*"
           required
-          onChange={(e) => setFileName(e.target.files?.[0]?.name ?? "")}
+          onChange={handleFileChange}
         />
         <p className="text-xs text-muted-foreground">
           {fileName || "Screenshot of your GCash transfer. 15 MB max."}

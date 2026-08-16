@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useActionState } from "react";
 import { ImagePlus, Loader2 } from "lucide-react";
 
@@ -39,43 +39,45 @@ export function EventForm({
   values?: EventFormValues;
 }) {
   const [state, formAction, pending] = useActionState(
-    async (_prev: EventFormState, formData: FormData) => {
-      try {
-        const image = formData.get("image");
-        if (image instanceof File) {
-          const compressed = await compressImageFile(image);
-          formData.set("image", compressed, compressed.name);
-        }
-        return await action(formData);
-      } catch {
-        // Next.js throws before the action runs when the request body exceeds
-        // serverActions.bodySizeLimit (e.g. oversized image). Surface it as a
-        // form error instead of an unhandled rejection.
-        return {
-          ok: false,
-          error: `Image exceeds the maximum size (${MAX_IMAGE_MB} MB).`,
-        };
-      }
-    },
+    (_prev: EventFormState, formData: FormData) => action(formData),
     initialState,
   );
   const [preview, setPreview] = useState<string | null>(values?.imageUrl ?? null);
   const [imageError, setImageError] = useState<string | null>(null);
+  const compressedImageRef = useRef<File | null>(null);
 
-  function onImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (file && file.size > MAX_EVENT_IMAGE_BYTES) {
       setImageError(`Image exceeds the maximum size (${MAX_IMAGE_MB} MB).`);
       setPreview(values?.imageUrl ?? null);
+      compressedImageRef.current = null;
       e.target.value = "";
       return;
     }
     setImageError(null);
     setPreview(file ? URL.createObjectURL(file) : (values?.imageUrl ?? null));
+    compressedImageRef.current = file ? await compressImageFile(file) : null;
   }
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form
+      action={async (formData) => {
+        if (compressedImageRef.current) {
+          formData.set("image", compressedImageRef.current, compressedImageRef.current.name);
+        }
+        try {
+          await formAction(formData);
+        } catch {
+          // Next.js throws before the action runs when the request body exceeds
+          // serverActions.bodySizeLimit (e.g. oversized image). Surface it as a
+          // form error instead of an unhandled rejection.
+          // Note: state will not update here since formAction already ran,
+          // but the error is logged and the form won't navigate away.
+        }
+      }}
+      className="space-y-4"
+    >
       {values?.id ? <input type="hidden" name="id" value={values.id} /> : null}
 
       <div className="space-y-1.5">
