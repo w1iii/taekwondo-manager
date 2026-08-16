@@ -1,7 +1,19 @@
 import Link from "next/link";
+import Image from "next/image";
+import { CalendarDays, MapPin, Tag } from "lucide-react";
+import { unstable_cache } from "next/cache";
 
 import { getCurrentUser } from "@/lib/auth";
 import { roleHome } from "@/lib/roles";
+import { db } from "@/lib/db";
+import {
+  formatDate,
+  formatPesos,
+  formatDeadline,
+  isEventUpcoming,
+  isRegistrationOpen,
+} from "@/lib/events";
+import { EventStatus } from "@/generated/prisma/client";
 
 const features = [
   {
@@ -24,10 +36,28 @@ const features = [
   },
 ];
 
+async function getPublishedEvents() {
+  return db.event.findMany({
+    where: { status: EventStatus.PUBLISHED },
+    orderBy: { eventDate: "asc" },
+  });
+}
+
+const getCachedPublishedEvents = unstable_cache(
+  getPublishedEvents,
+  ["landing-published-events"],
+  { tags: ["events-published"] },
+);
+
 export default async function HomePage() {
   const user = await getCurrentUser();
   const authenticated = user !== null;
   const home = authenticated ? roleHome(user.role) : "/sign-in";
+
+  const allEvents = await getCachedPublishedEvents();
+  const upcomingEvents = allEvents
+    .filter((e) => isEventUpcoming(e.eventDate))
+    .slice(0, 6);
 
   return (
     <div
@@ -155,6 +185,80 @@ export default async function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* Upcoming Events */}
+      {upcomingEvents.length > 0 && (
+        <section className="relative z-10 w-full max-w-[1280px] mx-auto px-6 md:px-12 py-16">
+          <h2 className="text-2xl font-bold text-white mb-8">Upcoming Events</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {upcomingEvents.map((event) => (
+              <div
+                key={event.id}
+                className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-lg overflow-hidden flex flex-col"
+              >
+                {event.imageUrl ? (
+                  <div className="relative h-40 w-full">
+                    <Image
+                      src={event.imageUrl}
+                      alt={event.name}
+                      fill
+                      sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                      className="object-cover"
+                    />
+                  </div>
+                ) : null}
+                <div className="p-5 flex flex-col flex-1">
+                  <h3 className="text-white font-semibold text-lg">{event.name}</h3>
+                  <div className="mt-3 space-y-2 text-sm text-surface-macadamia">
+                    <p className="flex items-center gap-2">
+                      <CalendarDays className="size-4 shrink-0" />
+                      {formatDate(event.eventDate)}
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <MapPin className="size-4 shrink-0" />
+                      {event.location}
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <Tag className="size-4 shrink-0" />
+                      {formatPesos(event.entryFeePesos)} per athlete
+                    </p>
+                  </div>
+                  <p className="mt-3 text-xs text-surface-macadamia/70">
+                    Registration closes {formatDeadline(event.registrationDeadline)}
+                  </p>
+                  <div className="mt-auto pt-4">
+                    {isRegistrationOpen(event.registrationDeadline) ? (
+                      <Link
+                        href={authenticated ? `/dashboard/events/${event.id}` : "/sign-in"}
+                        className="inline-flex items-center gap-1 text-sm font-semibold text-action-redwood hover:text-action-redwood/80 transition-colors"
+                      >
+                        Register
+                        <span className="material-symbols-outlined text-[16px]">
+                          arrow_forward
+                        </span>
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-surface-macadamia/50">
+                        Registration closed
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {allEvents.filter((e) => isEventUpcoming(e.eventDate)).length > 6 && (
+            <div className="mt-8 text-center">
+              <Link
+                href={authenticated ? home : "/sign-in"}
+                className="text-sm font-semibold text-white/70 hover:text-white transition-colors"
+              >
+                {authenticated ? "View all events →" : "Log in to see all events →"}
+              </Link>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Footer */}
       <footer className="relative z-20 w-full py-8 px-6 mt-auto">
