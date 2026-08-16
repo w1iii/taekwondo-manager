@@ -11,7 +11,6 @@ import { formatDate, formatDeadline, formatPesos } from "@/lib/events";
 import { receiptNumber } from "@/lib/payments";
 import { ProofView } from "@/components/proof-view";
 import { PrintButton } from "@/components/print-button";
-import { PaymentStatus } from "@/generated/prisma/client";
 
 export const metadata = { title: "Payment receipt" };
 
@@ -26,22 +25,21 @@ export default async function PaymentReceiptPage({
   const chapter = await getChapterForUser(user);
   if (!chapter) notFound();
 
-  const payment = await db.teamPayment.findFirst({
-    where: { id, chapterId: chapter.id },
-    include: { event: true },
+  const payment = await db.paymentAttempt.findFirst({
+    where: { id, order: { chapterId: chapter.id } },
+    include: { order: { include: { event: true, items: true } } },
   });
-  if (!payment || payment.status !== PaymentStatus.APPROVED) notFound();
+  if (!payment || payment.outcome !== "APPROVED") notFound();
 
-  const enrolled = await db.enrollment.count({
-    where: { eventId: payment.eventId, chapterId: chapter.id },
-  });
+  const event = payment.order.event;
+  const enrolled = payment.order.items.length;
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6 print:max-w-none print:space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Payment receipt</h1>
-          <p className="text-sm text-muted-foreground">{payment.event.name}</p>
+          <p className="text-sm text-muted-foreground">{event.name}</p>
         </div>
         <PrintButton />
       </div>
@@ -74,20 +72,20 @@ export default async function PaymentReceiptPage({
             </div>
             <div className="flex items-center justify-between gap-3">
               <dt className="text-muted-foreground">Event</dt>
-              <dd className="text-right font-medium">{payment.event.name}</dd>
+              <dd className="text-right font-medium">{event.name}</dd>
             </div>
             <div className="flex items-center justify-between gap-3">
               <dt className="text-muted-foreground">Event date</dt>
               <dd className="flex items-center gap-1.5">
                 <CalendarDays className="size-4" />
-                {formatDate(payment.event.eventDate)}
+                {formatDate(event.eventDate)}
               </dd>
             </div>
             <div className="flex items-center justify-between gap-3">
               <dt className="text-muted-foreground">Location</dt>
               <dd className="flex items-center gap-1.5">
                 <MapPin className="size-4" />
-                {payment.event.location}
+                {event.location}
               </dd>
             </div>
             <div className="flex items-center justify-between gap-3">
@@ -100,7 +98,7 @@ export default async function PaymentReceiptPage({
             </div>
             <div className="flex items-center justify-between gap-3">
               <dt className="text-muted-foreground">Fee per athlete</dt>
-              <dd>{formatPesos(payment.event.entryFeePesos)}</dd>
+              <dd>{formatPesos(event.entryFeePesos)}</dd>
             </div>
           </dl>
 
@@ -119,7 +117,7 @@ export default async function PaymentReceiptPage({
           {payment.reviewedAt ? (
             <p className="text-xs text-muted-foreground">
               Approved {formatDate(payment.reviewedAt)} · Registration closes{" "}
-              {formatDeadline(payment.event.registrationDeadline)}
+              {formatDeadline(event.registrationDeadline)}
             </p>
           ) : null}
         </CardContent>
@@ -133,7 +131,7 @@ export default async function PaymentReceiptPage({
           paymentId={payment.id}
           referenceNo={payment.referenceNo}
           amount={formatPesos(payment.amountPesos)}
-          status={payment.status}
+          status={payment.outcome}
           submitted={formatDate(payment.submittedAt)}
         />
       </section>

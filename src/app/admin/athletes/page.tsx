@@ -85,8 +85,8 @@ export default async function AthletesAdminPage({
             gte: divisionFilter.birthYearMin,
             lte: divisionFilter.birthYearMax,
           },
-          enrollments: {
-            some: { eventId: divisionFilter.eventId },
+          entries: {
+            some: { teamRegistration: { eventId: divisionFilter.eventId } },
           },
         }
       : {}),

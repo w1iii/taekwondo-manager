@@ -8,24 +8,23 @@ import { requireRole } from "@/lib/auth";
 import { getChapterForUser } from "@/lib/chapters";
 import { db } from "@/lib/db";
 import { formatDate, formatPesos } from "@/lib/events";
-import { EventStatus, PaymentStatus } from "@/generated/prisma/client";
+import { EventStatus } from "@/generated/prisma/client";
 import { submitPayment, cancelPayment } from "./actions";
 import { PaymentForm } from "./payment-form";
 import { CancelPaymentButton } from "./cancel-payment-button";
 
 export const metadata = { title: "Team Payment" };
 
-const STATUS_LABELS: Record<PaymentStatus, string> = {
-  PENDING: "Pending review",
+const STATUS_LABELS: Record<string, string> = {
+  PENDING: "Pending payment",
+  PAID: "Pending review",
   APPROVED: "Approved",
-  REJECTED: "Rejected — resubmit",
-  CANCELLED: "Cancelled",
+  REJECTED: "Rejected",
 };
 
-function statusVariant(status: PaymentStatus) {
-  if (status === PaymentStatus.APPROVED) return "default";
-  if (status === PaymentStatus.PENDING) return "secondary";
-  if (status === PaymentStatus.CANCELLED) return "outline";
+function statusVariant(status: string) {
+  if (status === "APPROVED") return "default";
+  if (status === "PAID") return "secondary";
   return "destructive";
 }
 
@@ -46,22 +45,17 @@ export default async function PaymentsPage() {
     );
   }
 
-  const grouped = await db.enrollment.groupBy({
-    by: ["eventId"],
+  const orders = await db.order.findMany({
     where: { chapterId: chapter.id },
-    _count: { _all: true },
-  });
-  const enrolledByEvent = new Map(grouped.map((g) => [g.eventId, g._count._all]));
-
-  const events = await db.event.findMany({
-    where: { id: { in: [...enrolledByEvent.keys()] }, status: EventStatus.PUBLISHED },
-    orderBy: { eventDate: "asc" },
+    include: {
+      event: true,
+      items: { include: { athlete: true } },
+      payments: { orderBy: { submittedAt: "desc" } },
+    },
+    orderBy: { createdAt: "desc" },
   });
 
-  const payments = await db.teamPayment.findMany({
-    where: { chapterId: chapter.id },
-  });
-  const paymentByEvent = new Map(payments.map((p) => [p.eventId, p]));
+  const filtered = orders.filter((o) => o.event.status === EventStatus.PUBLISHED);
 
   return (
     <div className="space-y-6">
@@ -72,7 +66,7 @@ export default async function PaymentsPage() {
         </p>
       </div>
 
-      {events.length === 0 ? (
+      {filtered.length === 0 ? (
         <Card>
           <CardContent className="text-sm text-muted-foreground">
             No events to pay for yet. Register athletes for an event first.
@@ -80,13 +74,14 @@ export default async function PaymentsPage() {
         </Card>
       ) : (
         <ul className="space-y-3">
-          {events.map((event) => {
-            const enrolled = enrolledByEvent.get(event.id) ?? 0;
-            const amount = enrolled * event.entryFeePesos;
-            const payment = paymentByEvent.get(event.id);
+          {filtered.map((order) => {
+            const event = order.event;
+            const itemCount = order.items.length;
+            const amount = itemCount * event.entryFeePesos;
+            const latestAttempt = order.payments[0];
 
             return (
-              <li key={event.id} className="rounded-lg border bg-card p-4">
+              <li key={order.id} className="rounded-lg border bg-card p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="font-medium">{event.name}</p>
@@ -100,7 +95,7 @@ export default async function PaymentsPage() {
                         {event.location}
                       </p>
                       <p>
-                        {enrolled} athlete{enrolled === 1 ? "" : "s"} ×{" "}
+                        {itemCount} athlete{itemCount === 1 ? "" : "s"} ×{" "}
                         {formatPesos(event.entryFeePesos)} ={" "}
                         <span className="font-semibold text-foreground">
                           {formatPesos(amount)}
@@ -109,32 +104,43 @@ export default async function PaymentsPage() {
                     </div>
                   </div>
 
-                  {payment ? (
-                    <Badge variant={statusVariant(payment.status)}>
-                      {STATUS_LABELS[payment.status]}
-                    </Badge>
-                  ) : null}
+                  <Badge variant={statusVariant(order.status)}>
+                    {STATUS_LABELS[order.status]}
+                  </Badge>
                 </div>
 
-                {payment ? (
+                {itemCount > 0 && (
+                  <div className="mt-3">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                      Registered athletes:
+                    </p>
+                    <ul className="text-sm">
+                      {order.items.map((item) => (
+                        <li key={item.id}>{item.athlete.name}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {latestAttempt && (
                   <div className="mt-3 space-y-2 rounded-lg border bg-muted/40 p-3 text-sm">
                     <p>
                       Reference:{" "}
-                      <span className="font-medium">{payment.referenceNo}</span>
+                      <span className="font-medium">{latestAttempt.referenceNo}</span>
                     </p>
                     <p className="flex flex-wrap items-center gap-2">
                       Proof:
                       <Button
-                        render={<Link href={`/dashboard/payments/${payment.id}`} />}
+                        render={<Link href={`/dashboard/payments/${latestAttempt.id}`} />}
                         variant="outline"
                         size="sm"
                       >
                         View screenshot
                       </Button>
-                      {payment.status === PaymentStatus.APPROVED ? (
+                      {latestAttempt.outcome === "APPROVED" ? (
                         <Button
                           render={
-                            <Link href={`/dashboard/payments/${payment.id}/receipt`} />
+                            <Link href={`/dashboard/payments/${latestAttempt.id}/receipt`} />
                           }
                           variant="outline"
                           size="sm"
@@ -142,45 +148,48 @@ export default async function PaymentsPage() {
                           Receipt
                         </Button>
                       ) : null}
-                      {payment.status === PaymentStatus.PENDING ? (
+                      {latestAttempt.outcome === "PENDING" ? (
                         <CancelPaymentButton
-                          paymentId={payment.id}
+                          paymentId={latestAttempt.id}
                           action={cancelPayment}
                         />
                       ) : null}
                     </p>
-                    {payment.status === PaymentStatus.REJECTED ? (
+                    {latestAttempt.outcome === "REJECTED" ? (
                       <p role="alert" className="text-destructive">
-                        {payment.rejectionReason
-                          ? `Reason: ${payment.rejectionReason}`
+                        {latestAttempt.rejectionReason
+                          ? `Reason: ${latestAttempt.rejectionReason}`
                           : "Rejected. Update your details and resubmit."}
                       </p>
                     ) : null}
-                    {payment.status === PaymentStatus.CANCELLED ? (
-                      <p role="alert" className="text-muted-foreground">
-                        {payment.rejectionReason
-                          ? `Cancelled: ${payment.rejectionReason}`
-                          : "Cancelled."}
-                      </p>
-                    ) : null}
-                    {payment.status === PaymentStatus.APPROVED ? (
+                    {latestAttempt.outcome === "APPROVED" ? (
                       <p className="text-emerald-600">
                         Your registration for this event is confirmed.
                       </p>
                     ) : null}
                   </div>
-                ) : null}
+                )}
 
-                {!payment || payment.status === PaymentStatus.REJECTED ? (
+                {order.status === "PENDING" && (
                   <div className="mt-4">
                     <PaymentForm
-                      eventId={event.id}
+                      orderId={order.id}
                       action={submitPayment}
-                      defaultReference={payment?.referenceNo}
-                      resubmitting={payment?.status === PaymentStatus.REJECTED}
+                      defaultReference={latestAttempt?.referenceNo}
                     />
                   </div>
-                ) : null}
+                )}
+
+                {order.status === "REJECTED" && (
+                  <div className="mt-4">
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Order was rejected. Create a new order with athletes to try again.
+                    </p>
+                    <Button render={<Link href={`/dashboard/events/${event.id}`} />} variant="outline" size="sm">
+                      Create new order
+                    </Button>
+                  </div>
+                )}
               </li>
             );
           })}

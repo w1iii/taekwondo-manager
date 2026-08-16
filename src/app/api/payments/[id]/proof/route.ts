@@ -7,13 +7,13 @@ export const dynamic = "force-dynamic";
 
 async function canAccessPayment(
   user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>,
-  payment: { chapterId: string },
+  payment: { order: { chapterId: string } },
 ): Promise<boolean> {
   if (user.role === "organizer") return true;
   if (user.role !== "coach") return false;
-  if (payment.chapterId === user.chapterId) return true;
+  if (payment.order.chapterId === user.chapterId) return true;
   const chapter = await getChapterForUser(user);
-  return chapter !== null && chapter.id === payment.chapterId;
+  return chapter !== null && chapter.id === payment.order.chapterId;
 }
 
 export async function GET(
@@ -24,7 +24,10 @@ export async function GET(
   const user = await getCurrentUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
-  const payment = await db.teamPayment.findUnique({ where: { id } });
+  const payment = await db.paymentAttempt.findUnique({
+    where: { id },
+    include: { order: true },
+  });
   if (!payment) return new Response("Not found", { status: 404 });
 
   if (!(await canAccessPayment(user, payment))) {

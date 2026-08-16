@@ -21,7 +21,6 @@ const prisma = new PrismaClient({
 });
 
 const WEIGHT_CLASSES = [
-  // WT Senior — Kyorugi (reused across Cadet/Junior/Senior per M10 decision)
   { gender: Gender.MALE, name: "Fin", minKg: null, maxKg: 54, sortOrder: 1 },
   { gender: Gender.MALE, name: "Fly", minKg: null, maxKg: 58, sortOrder: 2 },
   { gender: Gender.MALE, name: "Feather", minKg: null, maxKg: 63, sortOrder: 3 },
@@ -281,12 +280,6 @@ const FEMALE_FIRST = [
   "Sage",
 ];
 
-/**
- * Seed `players` athletes spread across all chapters, enroll them in a
- * published event, then generate divisions and brackets. Idempotent: clears
- * any existing seed athletes + enrollments so re-runs replace, not accumulate.
- * Run with: npx prisma db seed -- --players=100
- */
 async function seedPlayers(players: number) {
   const chapters = await prisma.chapter.findMany({
     where: { status: ChapterStatus.APPROVED },
@@ -306,7 +299,9 @@ async function seedPlayers(players: number) {
     return;
   }
 
-  await prisma.enrollment.deleteMany({});
+  await prisma.approvedAthlete.deleteMany({});
+  await prisma.orderItem.deleteMany({});
+  await prisma.order.deleteMany({});
   await prisma.athlete.deleteMany({});
 
   const eventYear = event.eventDate.getFullYear();
@@ -345,14 +340,33 @@ async function seedPlayers(players: number) {
     },
   });
 
-  await prisma.enrollment.createMany({
-    data: athletes.map((a) => ({
-      eventId: event.id,
-      athleteId: a.id,
-      chapterId: a.chapterId,
-    })),
-    skipDuplicates: true,
-  });
+  const athletesByChapter = new Map<string, typeof athletes>();
+  for (const a of athletes) {
+    const list = athletesByChapter.get(a.chapterId) ?? [];
+    list.push(a);
+    athletesByChapter.set(a.chapterId, list);
+  }
+
+  for (const [chapterId, chapterAthletes] of athletesByChapter) {
+    const order = await prisma.order.create({
+      data: {
+        eventId: event.id,
+        chapterId,
+        coachId: chapterId,
+        status: "APPROVED",
+      },
+    });
+
+    await prisma.approvedAthlete.createMany({
+      data: chapterAthletes.map((a) => ({
+        eventId: event.id,
+        chapterId,
+        athleteId: a.id,
+        orderId: order.id,
+      })),
+      skipDuplicates: true,
+    });
+  }
 
   const weightClasses = await prisma.weightClass.findMany({
     orderBy: [{ gender: "asc" }, { sortOrder: "asc" }],
@@ -410,11 +424,11 @@ async function seedPlayers(players: number) {
   }
 
   const athleteCount = await prisma.athlete.count();
-  const enrollmentCount = await prisma.enrollment.count({
+  const approvedCount = await prisma.approvedAthlete.count({
     where: { eventId: event.id },
   });
   console.log(`Seeded ${athletes.length} athletes across ${chapters.length} chapters.`);
-  console.log(`Total athletes: ${athleteCount}, enrollments: ${enrollmentCount}`);
+  console.log(`Total athletes: ${athleteCount}, approved: ${approvedCount}`);
   console.log(`Event "${event.name}" (${eventYear}):`);
   console.log(`  ${divisions.length} divisions, ${bracketCount} brackets generated.`);
   const byGender = {

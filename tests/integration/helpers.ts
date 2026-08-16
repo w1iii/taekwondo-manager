@@ -22,8 +22,10 @@ export async function resetDb(): Promise<void> {
     db.notification.deleteMany({}),
     db.bracketCell.deleteMany({}),
     db.division.deleteMany({}),
-    db.teamPayment.deleteMany({}),
-    db.enrollment.deleteMany({}),
+    db.paymentAttempt.deleteMany({}),
+    db.approvedAthlete.deleteMany({}),
+    db.orderItem.deleteMany({}),
+    db.order.deleteMany({}),
     db.event.deleteMany({}),
     db.athlete.deleteMany({}),
     db.weightClass.deleteMany({}),
@@ -86,8 +88,17 @@ export async function seedEvent(overrides: Partial<{ status: EventStatus; eventD
   });
 }
 
-export async function seedEnrollment(eventId: string, chapterId: string, athleteId: string) {
-  return db.enrollment.create({ data: { eventId, chapterId, athleteId } });
+export async function seedApprovedAthlete(eventId: string, chapterId: string, athleteId: string) {
+  return db.approvedAthlete.upsert({
+    where: { eventId_athleteId: { eventId, athleteId } },
+    create: {
+      eventId,
+      chapterId,
+      athleteId,
+      orderId: "seed",
+    },
+    update: {},
+  });
 }
 
 /** Wraps requireRole so each test can set the acting user. */

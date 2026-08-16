@@ -6,7 +6,7 @@ import { requireRole } from "@/lib/auth";
 import { getChapterForUser } from "@/lib/chapters";
 import { db } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { EVENT_ENROLLMENTS_TAG } from "@/lib/enrollments";
+import { EVENT_REGISTRATIONS_TAG } from "@/lib/enrollments";
 import { parseAthleteFormData, type AthleteFormState } from "@/lib/athletes";
 
 export async function createAthlete(formData: FormData): Promise<AthleteFormState> {
@@ -68,15 +68,18 @@ export async function deleteAthlete(formData: FormData): Promise<void> {
   const chapter = await getChapterForUser(user);
   if (!chapter) return;
 
-  await db.$transaction([
-    db.enrollment.deleteMany({
-      where: { athleteId: id, chapterId: chapter.id },
-    }),
-    db.athlete.deleteMany({
-      where: { id, chapterId: chapter.id },
-    }),
-  ]);
+  await db.orderItem.deleteMany({
+    where: { athleteId: id },
+  });
+
+  await db.approvedAthlete.deleteMany({
+    where: { athleteId: id },
+  });
+
+  await db.athlete.deleteMany({
+    where: { id, chapterId: chapter.id },
+  });
 
   revalidatePath("/dashboard/roster");
-  revalidateTag(EVENT_ENROLLMENTS_TAG, "max");
+  revalidateTag(EVENT_REGISTRATIONS_TAG, "max");
 }

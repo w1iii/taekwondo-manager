@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { ChapterStatus, EventStatus, PaymentStatus } from "@/generated/prisma/client";
+import { ChapterStatus, EventStatus } from "@/generated/prisma/client";
 
 export const metadata = { title: "Organizer Overview" };
 
@@ -13,7 +13,7 @@ export default async function AdminOverviewPage() {
       db.chapter.count({ where: { status: ChapterStatus.PENDING } }),
       db.chapter.count({ where: { status: ChapterStatus.APPROVED } }),
       db.event.count({ where: { status: EventStatus.PUBLISHED } }),
-      db.teamPayment.count({ where: { status: PaymentStatus.PENDING } }),
+      db.paymentAttempt.count({ where: { outcome: "PENDING" } }),
       db.division.count(),
       db.weightClass.count(),
     ]);

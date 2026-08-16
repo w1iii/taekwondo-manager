@@ -21,7 +21,7 @@ function statusBadge(status: EventStatus) {
   );
 }
 
-function EventCard({ event }: { event: Event & { _count: { enrollments: number } } }) {
+function EventCard({ event }: { event: Event & { _count: { totalEntries: number } } }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -55,8 +55,8 @@ function EventCard({ event }: { event: Event & { _count: { enrollments: number }
             Registration closes {formatDeadline(event.registrationDeadline)}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {event._count.enrollments} athlete
-            {event._count.enrollments === 1 ? "" : "s"} registered
+            {event._count.totalEntries} athlete
+            {event._count.totalEntries === 1 ? "" : "s"} registered
           </p>
           {event.description ? (
             <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
@@ -72,7 +72,7 @@ function EventCard({ event }: { event: Event & { _count: { enrollments: number }
             size="sm"
           >
             <Users />
-            Registrations ({event._count.enrollments})
+            Registrations ({event._count.totalEntries})
           </Button>
           <EventActions id={event.id} status={event.status} />
         </div>
@@ -103,10 +103,27 @@ function Section({
 export default async function EventsAdminPage() {
   await requireRole("organizer");
 
-  const events = await db.event.findMany({
+  const rawEvents = await db.event.findMany({
     orderBy: { eventDate: "desc" },
-    include: { _count: { select: { enrollments: true } } },
+    include: { _count: { select: { orders: true } } },
   });
+
+  const eventIds = rawEvents.map((e) => e.id);
+  const approvedCounts = await db.approvedAthlete.groupBy({
+    by: ["eventId"],
+    where: { eventId: { in: eventIds } },
+    _count: { _all: true },
+  });
+  const approvedCountByEvent = new Map(
+    approvedCounts.map((c) => [c.eventId, c._count._all]),
+  );
+
+  const events = rawEvents.map((e) => ({
+    ...e,
+    _count: {
+      totalEntries: approvedCountByEvent.get(e.id) ?? 0,
+    },
+  }));
 
   const published = events.filter((e) => e.status === EventStatus.PUBLISHED);
   const drafts = events.filter((e) => e.status === EventStatus.DRAFT);

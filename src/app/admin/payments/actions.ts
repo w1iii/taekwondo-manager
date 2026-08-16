@@ -1,12 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { logInfo, reportError } from "@/lib/log";
 import { notify } from "@/lib/notifications";
-import { PaymentStatus } from "@/generated/prisma/client";
+import { EVENT_REGISTRATIONS_TAG } from "@/lib/enrollments";
 
 export async function approvePayment(formData: FormData): Promise<void> {
   const user = await requireRole("organizer");
@@ -14,16 +14,40 @@ export async function approvePayment(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
 
-  const payment = await db.teamPayment.findUnique({
+  const payment = await db.paymentAttempt.findUnique({
     where: { id },
-    include: { event: true },
+    include: { order: { include: { event: true, items: { include: { athlete: true } } } } },
   });
   if (!payment) return;
 
   try {
-    await db.teamPayment.update({
-      where: { id },
-      data: { status: PaymentStatus.APPROVED, reviewedAt: new Date() },
+    await db.$transaction(async (tx) => {
+      await tx.paymentAttempt.update({
+        where: { id },
+        data: { outcome: "APPROVED", reviewedAt: new Date() },
+      });
+
+      await tx.order.update({
+        where: { id: payment.orderId },
+        data: { status: "APPROVED" },
+      });
+
+      const orderItems = payment.order.items;
+      if (orderItems.length > 0) {
+        await tx.approvedAthlete.createMany({
+          data: orderItems.map((item) => ({
+            eventId: payment.order.eventId,
+            chapterId: payment.order.chapterId,
+            athleteId: item.athleteId,
+            orderId: payment.orderId,
+          })),
+          skipDuplicates: true,
+        });
+
+        await tx.orderItem.deleteMany({
+          where: { orderId: payment.orderId },
+        });
+      }
     });
   } catch (error) {
     reportError("approve-payment-failed", { paymentId: id, actorId: user.userId }, error);
@@ -33,9 +57,9 @@ export async function approvePayment(formData: FormData): Promise<void> {
   try {
     await notify(
       "COACH",
-      payment.chapterId,
+      payment.order.chapterId,
       "Payment approved",
-      `${payment.event.name} — registration confirmed.`,
+      `${payment.order.event.name} — registration confirmed.`,
       "/dashboard/payments",
     );
   } catch (error) {
@@ -44,13 +68,14 @@ export async function approvePayment(formData: FormData): Promise<void> {
 
   logInfo("payment-approved", {
     paymentId: id,
-    chapterId: payment.chapterId,
-    eventId: payment.eventId,
+    orderId: payment.orderId,
+    eventId: payment.order.eventId,
     actorId: user.userId,
   });
   revalidatePath("/admin/payments");
   revalidatePath("/admin");
   revalidatePath("/dashboard/payments");
+  revalidateTag(EVENT_REGISTRATIONS_TAG, "max");
 }
 
 export async function rejectPayment(formData: FormData): Promise<void> {
@@ -61,16 +86,21 @@ export async function rejectPayment(formData: FormData): Promise<void> {
 
   const reason = (formData.get("reason") as string | null)?.trim() || null;
 
-  const payment = await db.teamPayment.findUnique({
+  const payment = await db.paymentAttempt.findUnique({
     where: { id },
-    include: { event: true },
+    include: { order: { include: { event: true } } },
   });
   if (!payment) return;
 
   try {
-    await db.teamPayment.update({
+    await db.paymentAttempt.update({
       where: { id },
-      data: { status: PaymentStatus.REJECTED, rejectionReason: reason, reviewedAt: new Date() },
+      data: { outcome: "REJECTED", rejectionReason: reason, reviewedAt: new Date() },
+    });
+
+    await db.order.update({
+      where: { id: payment.orderId },
+      data: { status: "REJECTED" },
     });
   } catch (error) {
     reportError("reject-payment-failed", { paymentId: id, actorId: user.userId }, error);
@@ -80,11 +110,11 @@ export async function rejectPayment(formData: FormData): Promise<void> {
   try {
     await notify(
       "COACH",
-      payment.chapterId,
+      payment.order.chapterId,
       "Payment needs attention",
       reason
-        ? `${payment.event.name} — ${reason}`
-        : `${payment.event.name} — please resubmit your payment proof.`,
+        ? `${payment.order.event.name} — ${reason}`
+        : `${payment.order.event.name} — please resubmit your payment proof.`,
       "/dashboard/payments",
     );
   } catch (error) {
@@ -93,8 +123,8 @@ export async function rejectPayment(formData: FormData): Promise<void> {
 
   logInfo("payment-rejected", {
     paymentId: id,
-    chapterId: payment.chapterId,
-    eventId: payment.eventId,
+    orderId: payment.orderId,
+    eventId: payment.order.eventId,
     actorId: user.userId,
   });
   revalidatePath("/admin/payments");

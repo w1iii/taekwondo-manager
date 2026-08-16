@@ -6,17 +6,17 @@ import { requireRole } from "@/lib/auth";
 import { getChapterForUser } from "@/lib/chapters";
 import { db } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { EVENT_ENROLLMENTS_TAG } from "@/lib/enrollments";
-import { EventStatus, PaymentStatus } from "@/generated/prisma/client";
+import { EVENT_REGISTRATIONS_TAG } from "@/lib/enrollments";
+import { EventStatus } from "@/generated/prisma/client";
 
-export type EnrollState = { ok: true } | { ok: false; error: string };
+export type RegisterState = { ok: true } | { ok: false; error: string };
 
-export async function enrollAthletes(formData: FormData): Promise<EnrollState> {
+export async function registerAthletes(formData: FormData): Promise<RegisterState> {
   const user = await requireRole("coach");
 
-  const withinLimit = await checkRateLimit(`enroll:${user.userId}`, 20, 60_000);
+  const withinLimit = await checkRateLimit(`register:${user.userId}`, 20, 60_000);
   if (!withinLimit) {
-    return { ok: false, error: "Too many enrollments. Try again in a minute." };
+    return { ok: false, error: "Too many requests. Try again in a minute." };
   }
 
   const eventId = String(formData.get("eventId") ?? "");
@@ -52,44 +52,58 @@ export async function enrollAthletes(formData: FormData): Promise<EnrollState> {
     return { ok: false, error: "One or more athletes are not on your roster." };
   }
 
-  await db.enrollment.createMany({
-    data: athleteIds.map((athleteId) => ({
+  const existingPending = await db.order.findFirst({
+    where: {
       eventId,
-      athleteId,
       chapterId: chapter.id,
-    })),
-    skipDuplicates: true,
+      status: { in: ["PENDING", "PAID"] },
+    },
+  });
+
+  if (existingPending) {
+    return {
+      ok: false,
+      error: "You already have an active order. Complete or cancel it before creating a new one.",
+    };
+  }
+
+  await db.order.create({
+    data: {
+      eventId,
+      coachId: chapter.id,
+      chapterId: chapter.id,
+      items: {
+        create: athleteIds.map((athleteId) => ({ athleteId })),
+      },
+    },
   });
 
   revalidatePath("/dashboard/events");
   revalidatePath(`/dashboard/events/${eventId}`);
-  revalidateTag(EVENT_ENROLLMENTS_TAG, "max");
+  revalidateTag(EVENT_REGISTRATIONS_TAG, "max");
   return { ok: true };
 }
 
-export async function unenrollAthlete(formData: FormData): Promise<void> {
+export async function removeAthlete(formData: FormData): Promise<void> {
   const user = await requireRole("coach");
 
-  const id = String(formData.get("id") ?? "");
-  if (!id) return;
+  const itemId = String(formData.get("itemId") ?? "");
+  if (!itemId) return;
 
   const chapter = await getChapterForUser(user);
   if (!chapter) return;
 
-  const enrollment = await db.enrollment.findUnique({ where: { id } });
-  if (!enrollment || enrollment.chapterId !== chapter.id) return;
-
-  const payment = await db.teamPayment.findUnique({
-    where: { eventId_chapterId: { eventId: enrollment.eventId, chapterId: chapter.id } },
+  const item = await db.orderItem.findUnique({
+    where: { id: itemId },
+    include: { order: true },
   });
-  if (payment && payment.status !== PaymentStatus.REJECTED) {
-    return;
-  }
+  if (!item || item.order.chapterId !== chapter.id) return;
 
-  await db.enrollment.deleteMany({
-    where: { id, chapterId: chapter.id },
-  });
+  if (item.order.status !== "PENDING") return;
+
+  await db.orderItem.delete({ where: { id: itemId } });
 
   revalidatePath("/dashboard/events");
-  revalidateTag(EVENT_ENROLLMENTS_TAG, "max");
+  revalidatePath(`/dashboard/events/${item.order.eventId}`);
+  revalidateTag(EVENT_REGISTRATIONS_TAG, "max");
 }

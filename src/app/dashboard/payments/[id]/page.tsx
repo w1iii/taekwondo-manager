@@ -23,18 +23,20 @@ export default async function PaymentProofCoachPage({
   const chapter = await getChapterForUser(user);
   if (!chapter) notFound();
 
-  const payment = await db.teamPayment.findFirst({
-    where: { id, chapterId: chapter.id },
-    include: { event: true },
+  const payment = await db.paymentAttempt.findFirst({
+    where: { id, order: { chapterId: chapter.id } },
+    include: { order: { include: { event: true } } },
   });
   if (!payment) notFound();
+
+  const event = payment.order.event;
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Payment proof</h1>
-          <p className="text-sm text-muted-foreground">{payment.event.name}</p>
+          <p className="text-sm text-muted-foreground">{event.name}</p>
         </div>
         <Button render={<Link href="/dashboard/payments" />} variant="outline">
           <ArrowLeft />
@@ -46,11 +48,11 @@ export default async function PaymentProofCoachPage({
         <CardContent className="space-y-1 text-sm">
           <p className="flex items-center gap-2">
             <CalendarDays className="size-4" />
-            {formatDate(payment.event.eventDate)}
+            {formatDate(event.eventDate)}
           </p>
           <p className="flex items-center gap-2">
             <MapPin className="size-4" />
-            {payment.event.location}
+            {event.location}
           </p>
         </CardContent>
       </Card>
@@ -59,7 +61,7 @@ export default async function PaymentProofCoachPage({
         paymentId={payment.id}
         referenceNo={payment.referenceNo}
         amount={formatPesos(payment.amountPesos)}
-        status={payment.status}
+        status={payment.outcome}
         submitted={formatDate(payment.submittedAt)}
         rejectionReason={payment.rejectionReason}
       />

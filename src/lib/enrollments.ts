@@ -4,22 +4,22 @@ import { unstable_cache } from "next/cache";
 
 import { db } from "@/lib/db";
 
-export const EVENT_ENROLLMENTS_TAG = "event-enrollments";
+export const EVENT_REGISTRATIONS_TAG = "event-registrations";
 
 /**
- * All enrollments (with athletes) for an event, cached per event. Bracket
- * generation reads this repeatedly — once per division — so the query runs
- * once per event instead of once per division. Invalidated via
- * `revalidateTag(EVENT_ENROLLMENTS_TAG, "max")` whenever an enrollment is
- * created or removed.
+ * All approved athletes for an event, cached per event.
+ * Bracket generation reads this repeatedly — once per division — so the query
+ * runs once per event instead of once per division. Invalidated via
+ * `revalidateTag(EVENT_REGISTRATIONS_TAG, "max")` whenever an order is
+ * approved.
  */
-export const getEventEnrollments = unstable_cache(
+export const getEventEntries = unstable_cache(
   async (eventId: string) =>
-    db.enrollment.findMany({
+    db.approvedAthlete.findMany({
       where: { eventId },
-      include: { athlete: true },
-      orderBy: { createdAt: "asc" },
+      include: { athlete: true, chapter: { select: { id: true } } },
+      orderBy: { approvedAt: "asc" },
     }),
-  ["event-enrollments"],
-  { tags: [EVENT_ENROLLMENTS_TAG], revalidate: 3600 },
+  ["event-entries"],
+  { tags: [EVENT_REGISTRATIONS_TAG], revalidate: 3600 },
 );

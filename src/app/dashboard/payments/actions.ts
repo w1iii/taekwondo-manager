@@ -11,19 +11,9 @@ import { parsePaymentFormData, type PaymentFormState } from "@/lib/payments";
 import { deleteUpload, saveUpload } from "@/lib/uploads";
 import { notify } from "@/lib/notifications";
 import { formatPesos } from "@/lib/events";
-import { EventStatus, PaymentStatus, Prisma } from "@/generated/prisma/client";
+import { EventStatus } from "@/generated/prisma/client";
 
 export type CancelPaymentState = { ok: true } | { ok: false; error: string };
-
-async function paymentDeps(eventId: string, chapterId: string) {
-  const event = await db.event.findFirst({
-    where: { id: eventId, status: EventStatus.PUBLISHED },
-  });
-  const enrolled = await db.enrollment.count({
-    where: { eventId, chapterId },
-  });
-  return { event, enrolled };
-}
 
 export async function submitPayment(formData: FormData): Promise<PaymentFormState> {
   const user = await requireRole("coach");
@@ -33,8 +23,8 @@ export async function submitPayment(formData: FormData): Promise<PaymentFormStat
     return { ok: false, error: "Too many payment submissions. Try again in a minute." };
   }
 
-  const eventId = String(formData.get("eventId") ?? "");
-  if (!eventId) return { ok: false, error: "Missing event." };
+  const orderId = String(formData.get("orderId") ?? "");
+  if (!orderId) return { ok: false, error: "Missing order." };
 
   const chapter = await getChapterForUser(user);
   if (!chapter) {
@@ -44,23 +34,33 @@ export async function submitPayment(formData: FormData): Promise<PaymentFormStat
   const parsed = parsePaymentFormData(formData);
   if (!parsed.ok) return parsed;
 
-  const { event, enrolled } = await paymentDeps(eventId, chapter.id);
-  if (!event) return { ok: false, error: "That event is not accepting payments." };
-  if (enrolled === 0) {
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    include: { event: true },
+  });
+  if (!order) return { ok: false, error: "Order not found." };
+  if (order.chapterId !== chapter.id) {
+    return { ok: false, error: "Unauthorized." };
+  }
+
+  const event = order.event;
+  if (event.status !== EventStatus.PUBLISHED) {
+    return { ok: false, error: "That event is not accepting payments." };
+  }
+
+  const itemCount = await db.orderItem.count({
+    where: { orderId },
+  });
+  if (itemCount === 0) {
     return { ok: false, error: "Register at least one athlete before paying." };
   }
 
-  const existing = await db.teamPayment.findUnique({
-    where: { eventId_chapterId: { eventId, chapterId: chapter.id } },
-  });
-  if (existing && existing.status !== PaymentStatus.REJECTED) {
-    return {
-      ok: false,
-      error:
-        existing.status === PaymentStatus.APPROVED
-          ? "Your payment for this event is already approved."
-          : "You already submitted a payment for this event. Awaiting review.",
-    };
+  if (order.status === "PAID") {
+    return { ok: false, error: "You already have a pending payment. Wait for review." };
+  }
+
+  if (order.status !== "PENDING") {
+    return { ok: false, error: "This order cannot be paid." };
   }
 
   let proofUrl: string;
@@ -73,55 +73,34 @@ export async function submitPayment(formData: FormData): Promise<PaymentFormStat
     };
   }
 
-  const amountPesos = enrolled * event.entryFeePesos;
+  const amountPesos = itemCount * event.entryFeePesos;
 
-  if (existing) {
-    await db.teamPayment.update({
-      where: { id: existing.id },
+  try {
+    await db.paymentAttempt.create({
       data: {
+        orderId,
         referenceNo: parsed.data.referenceNo,
         proofUrl,
         amountPesos,
-        status: PaymentStatus.PENDING,
-        rejectionReason: null,
-        submittedAt: new Date(),
       },
     });
-  } else {
-    try {
-      await db.teamPayment.create({
-        data: {
-          eventId,
-          chapterId: chapter.id,
-          referenceNo: parsed.data.referenceNo,
-          proofUrl,
-          amountPesos,
-        },
-      });
-    } catch (error) {
-      // Another request created the same (eventId, chapterId) row between our
-      // earlier existence check and this create (TOCTOU race on the unique
-      // constraint). Surface a friendly error instead of a 500, and remove the
-      // just-uploaded proof so no orphaned private file is left in storage.
-      await deleteUpload(proofUrl);
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        logInfo("payment-duplicate-blocked", { eventId, actorId: user.userId });
-        return {
-          ok: false,
-          error: "Your payment for this event was just submitted. Refresh to see its status.",
-        };
-      }
-      reportError("submit-payment-failed", { eventId, actorId: user.userId }, error);
-      throw error;
-    }
+
+    await db.order.update({
+      where: { id: orderId },
+      data: { status: "PAID" },
+    });
+  } catch (error) {
+    await deleteUpload(proofUrl);
+    reportError("submit-payment-failed", { orderId, actorId: user.userId }, error);
+    throw error;
   }
 
   logInfo("payment-submitted", {
-    eventId,
+    orderId,
+    eventId: order.eventId,
     chapterId: chapter.id,
     amountPesos,
     actorId: user.userId,
-    resubmitted: Boolean(existing),
   });
 
   await notify(
@@ -158,35 +137,35 @@ export async function cancelPayment(
     return { ok: false, error: "Chapter not found." };
   }
 
-  const payment = await db.teamPayment.findUnique({ where: { id: paymentId } });
+  const payment = await db.paymentAttempt.findUnique({
+    where: { id: paymentId },
+    include: { order: true },
+  });
   if (!payment) {
     return { ok: false, error: "Payment not found." };
   }
 
-  if (payment.chapterId !== chapter.id) {
+  if (payment.order.chapterId !== chapter.id) {
     return { ok: false, error: "Unauthorized." };
   }
 
-  if (payment.status === PaymentStatus.CANCELLED) {
-    return { ok: false, error: "Payment is already cancelled." };
+  if (payment.outcome !== "PENDING") {
+    return { ok: false, error: "Can only cancel pending payments." };
   }
 
-  if (payment.status === PaymentStatus.APPROVED) {
-    return { ok: false, error: "Cannot cancel an approved payment." };
-  }
-
-  await db.teamPayment.update({
+  await db.paymentAttempt.update({
     where: { id: paymentId },
-    data: {
-      status: PaymentStatus.CANCELLED,
-      rejectionReason: reason.trim(),
-      reviewedAt: new Date(),
-    },
+    data: { outcome: "REJECTED", rejectionReason: `Cancelled by coach: ${reason.trim()}`, reviewedAt: new Date() },
+  });
+
+  await db.order.update({
+    where: { id: payment.orderId },
+    data: { status: "REJECTED" },
   });
 
   logInfo("payment-cancelled", {
     paymentId,
-    eventId: payment.eventId,
+    orderId: payment.orderId,
     chapterId: chapter.id,
     actorId: user.userId,
   });

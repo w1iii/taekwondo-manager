@@ -6,9 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { requireRole } from "@/lib/auth";
 import { claimChapterForUser, getChapterForUser, CHAPTER_STATUS_LABELS } from "@/lib/chapters";
 import { db } from "@/lib/db";
-import { formatDate, formatPesos } from "@/lib/events";
-import { proofStatusLabel } from "@/lib/payments";
-import { ChapterStatus, EventStatus, PaymentStatus } from "@/generated/prisma/client";
+import { formatDate } from "@/lib/events";
+import { ChapterStatus, EventStatus } from "@/generated/prisma/client";
 
 export const metadata = { title: "Coach Overview" };
 
@@ -17,16 +16,17 @@ export default async function DashboardOverviewPage() {
   await claimChapterForUser(user);
   const chapter = await getChapterForUser(user);
 
-  const [athleteCount, nextEvent, nextPayment] = await Promise.all([
+  const [athleteCount, nextEvent, latestOrder] = await Promise.all([
     chapter ? db.athlete.count({ where: { chapterId: chapter.id } }) : Promise.resolve(0),
     db.event.findFirst({
       where: { status: EventStatus.PUBLISHED, eventDate: { gte: new Date() } },
       orderBy: { eventDate: "asc" },
     }),
     chapter
-      ? db.teamPayment.findFirst({
-          where: { chapterId: chapter.id, status: { not: PaymentStatus.REJECTED } },
-          orderBy: { submittedAt: "desc" },
+      ? db.order.findFirst({
+          where: { chapterId: chapter.id },
+          include: { event: true },
+          orderBy: { createdAt: "desc" },
         })
       : Promise.resolve(null),
   ]);
@@ -37,13 +37,19 @@ export default async function DashboardOverviewPage() {
         <CardHeader>
           <CardDescription>Payment status</CardDescription>
           <CardTitle className="text-lg">
-            {nextPayment ? (
+            {latestOrder ? (
               <Badge
                 variant={
-                  nextPayment.status === PaymentStatus.APPROVED ? "default" : "secondary"
+                  latestOrder.status === "APPROVED" ? "default" : "secondary"
                 }
               >
-                {proofStatusLabel(nextPayment.status)}
+                {latestOrder.status === "APPROVED"
+                  ? "Approved"
+                  : latestOrder.status === "PAID"
+                    ? "Pending review"
+                    : latestOrder.status === "REJECTED"
+                      ? "Rejected"
+                      : "Pending payment"}
               </Badge>
             ) : (
               "Not submitted"
@@ -51,16 +57,17 @@ export default async function DashboardOverviewPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          {nextPayment ? (
+          {latestOrder ? (
             <p>
-              {nextPayment.status === PaymentStatus.APPROVED
-                ? "Your team payment for the next event is in."
-                : "Your team payment for the next event is under review."}
+              {latestOrder.status === "APPROVED"
+                ? "Your team registration is confirmed."
+                : latestOrder.status === "PAID"
+                  ? "Your payment is under review."
+                  : "Submit payment for your registered athletes."}
             </p>
           ) : (
             <p>
-              Submit your team payment of {formatPesos(nextEvent.entryFeePesos)} per athlete for
-              the next event.
+              Register your team for the next event.
             </p>
           )}
         </CardContent>

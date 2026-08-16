@@ -22,29 +22,26 @@ export default async function EventRegistrationsPage({
   const event = await db.event.findFirst({ where: { id } });
   if (!event) notFound();
 
-  const enrollments = await db.enrollment.findMany({
+  const orders = await db.order.findMany({
     where: { eventId: id },
-    include: { athlete: true, chapter: true },
-    orderBy: [{ chapter: { name: "asc" } }, { athlete: { name: "asc" } }],
+    include: {
+      chapter: true,
+      items: {
+        include: { athlete: true },
+        orderBy: { athlete: { name: "asc" } },
+      },
+      payments: { orderBy: { submittedAt: "desc" } },
+    },
+    orderBy: { chapter: { name: "asc" } },
   });
 
-  const chapterIds = [...new Set(enrollments.map((e) => e.chapterId))];
-  const payments = await db.teamPayment.findMany({
-    where: { eventId: id, chapterId: { in: chapterIds } },
+  const approvedAthletes = await db.approvedAthlete.findMany({
+    where: { eventId: id },
+    include: { athlete: true },
+    orderBy: { approvedAt: "asc" },
   });
-  const paymentByChapter = new Map(payments.map((p) => [p.chapterId, p]));
 
-  const byChapter = new Map<string, (typeof enrollments)[number][]>();
-  for (const enrollment of enrollments) {
-    const list = byChapter.get(enrollment.chapterId) ?? [];
-    list.push(enrollment);
-    byChapter.set(enrollment.chapterId, list);
-  }
-  const chapters = [...byChapter.entries()].map(([chapterId, rows]) => ({
-    chapter: rows[0].chapter,
-    rows,
-    payment: paymentByChapter.get(chapterId) ?? null,
-  }));
+  const totalApproved = approvedAthletes.length;
 
   return (
     <div className="space-y-6">
@@ -53,8 +50,8 @@ export default async function EventRegistrationsPage({
           <h1 className="text-2xl font-bold tracking-tight">{event.name}</h1>
           <p className="text-sm text-muted-foreground">
             {formatDate(event.eventDate)} · {event.location} ·{" "}
-            {enrollments.length} athlete{enrollments.length === 1 ? "" : "s"} across{" "}
-            {chapters.length} chapter{chapters.length === 1 ? "" : "s"}
+            {totalApproved} approved athlete{totalApproved === 1 ? "" : "s"} across{" "}
+            {orders.length} chapter{orders.length === 1 ? "" : "s"}
           </p>
         </div>
         <Button render={<Link href="/admin/events" />} variant="outline">
@@ -63,7 +60,7 @@ export default async function EventRegistrationsPage({
         </Button>
       </div>
 
-      {chapters.length === 0 ? (
+      {orders.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground">
             <Users className="size-8" />
@@ -72,13 +69,12 @@ export default async function EventRegistrationsPage({
         </Card>
       ) : (
         <div className="space-y-4">
-          {chapters.map(({ chapter, rows, payment }) => (
+          {orders.map((order) => (
             <ChapterCard
-              key={chapter.id}
-              chapter={chapter}
-              rows={rows}
-              payment={payment}
-              entryFeePesos={event.entryFeePesos}
+              key={order.id}
+              chapter={order.chapter}
+              order={order}
+              approvedAthletes={approvedAthletes.filter((a) => a.chapterId === order.chapterId)}
             />
           ))}
         </div>

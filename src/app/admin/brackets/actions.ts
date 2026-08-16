@@ -11,7 +11,7 @@ import {
   participantsOf,
 } from "@/lib/brackets";
 import { buildDivisions, athletesInDivision } from "@/lib/divisions";
-import { getEventEnrollments } from "@/lib/enrollments";
+import { getEventEntries } from "@/lib/enrollments";
 import { EventType } from "@/generated/prisma/client";
 const ALL_EVENT_TYPES = [
   EventType.KYORUGI,
@@ -32,14 +32,14 @@ export async function generateDivisions(formData: FormData): Promise<void> {
   const selected = ALL_EVENT_TYPES.filter((t) => formData.get(`eventType:${t}`) === "on");
   const eventTypes = selected.length > 0 ? selected : [EventType.KYORUGI, EventType.POOMSAE];
 
-  const [enrollments, weightClasses] = await Promise.all([
-    getEventEnrollments(eventId),
+  const [entries, weightClasses] = await Promise.all([
+    getEventEntries(eventId),
     db.weightClass.findMany({ orderBy: [{ gender: "asc" }, { sortOrder: "asc" }] }),
   ]);
 
   const divisions = buildDivisions(
     event.eventDate.getFullYear(),
-    enrollments.map((e) => e.athlete),
+    entries.map((e) => e.athlete),
     weightClasses,
     eventTypes,
   );
@@ -77,7 +77,7 @@ export async function generateBracket(formData: FormData): Promise<void> {
   });
   if (!division) return;
 
-  const enrollments = await getEventEnrollments(division.eventId);
+  const entries = await getEventEntries(division.eventId);
 
   const athletes = athletesInDivision(
     {
@@ -89,7 +89,7 @@ export async function generateBracket(formData: FormData): Promise<void> {
       weightClass: division.weightClass,
     },
     division.event.eventDate.getFullYear(),
-    enrollments.map((e) => e.athlete),
+    entries.map((e) => e.athlete),
   );
 
   const cells = resolveByeWinners(generateBracketCells(athletes));
@@ -106,7 +106,7 @@ export async function generateBracket(formData: FormData): Promise<void> {
       throw error;
     }
 
-    const chapterIds = [...new Set(enrollments.map((e) => e.chapterId))];
+    const chapterIds = [...new Set(entries.map((e) => e.chapterId))];
     await db.notification.createMany({
       data: chapterIds.map((chapterId) => ({
         role: "COACH",
@@ -172,9 +172,6 @@ export async function recordWinner(formData: FormData): Promise<void> {
     winnerAthleteId = winnerId;
   }
 
-  // Cascade-clear winners downstream (parent and up) so re-deciding an
-  // earlier round can never leave a stale result in later rounds.
-  // Build a parent lookup once (childId → parent cell) so the walk is O(n).
   const parentByChild = new Map<string, (typeof cells)[number]>();
   for (const cell of cells) {
     if (cell.childAId) parentByChild.set(cell.childAId, cell);
@@ -223,4 +220,3 @@ export async function recordWinner(formData: FormData): Promise<void> {
   revalidatePath("/dashboard/brackets");
   revalidatePath(`/dashboard/brackets/${division.eventId}`);
 }
-

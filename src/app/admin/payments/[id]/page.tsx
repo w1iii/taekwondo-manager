@@ -18,11 +18,17 @@ export default async function PaymentProofAdminPage({
   await requireRole("organizer");
 
   const { id } = await params;
-  const payment = await db.teamPayment.findUnique({
+  const payment = await db.paymentAttempt.findUnique({
     where: { id },
-    include: { event: true, chapter: true },
+    include: {
+      order: {
+        include: { event: true, chapter: true },
+      },
+    },
   });
   if (!payment) notFound();
+
+  const { event, chapter } = payment.order;
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6">
@@ -30,7 +36,7 @@ export default async function PaymentProofAdminPage({
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Payment proof</h1>
           <p className="text-sm text-muted-foreground">
-            {payment.chapter.name} · {payment.event.name}
+            {chapter.name} · {event.name}
           </p>
         </div>
         <Button render={<Link href="/admin/payments" />} variant="outline">
@@ -43,7 +49,7 @@ export default async function PaymentProofAdminPage({
         paymentId={payment.id}
         referenceNo={payment.referenceNo}
         amount={formatPesos(payment.amountPesos)}
-        status={payment.status}
+        status={payment.outcome}
         submitted={formatDate(payment.submittedAt)}
         rejectionReason={payment.rejectionReason}
       />

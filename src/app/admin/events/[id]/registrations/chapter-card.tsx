@@ -28,27 +28,33 @@ type Chapter = {
   logoUrl?: string | null;
 };
 
-type Payment = {
+type Order = {
   status: string;
-} | null;
+  items: {
+    id: string;
+    athlete: Athlete;
+  }[];
+  payments: {
+    outcome: string;
+    amountPesos: number;
+  }[];
+};
 
-type Enrollment = {
-  id: string;
+type ApprovedAthleteEntry = {
   athlete: Athlete;
 };
 
 export function ChapterCard({
   chapter,
-  rows,
-  payment,
-  entryFeePesos,
+  order,
+  approvedAthletes,
 }: {
   chapter: Chapter;
-  rows: Enrollment[];
-  payment: Payment;
-  entryFeePesos: number;
+  order: Order;
+  approvedAthletes: ApprovedAthleteEntry[];
 }) {
   const [open, setOpen] = useState(false);
+  const latestPayment = order.payments[0];
 
   return (
     <Card>
@@ -68,19 +74,15 @@ export function ChapterCard({
               <p className="font-semibold">{chapter.name}</p>
               <p className="text-sm text-muted-foreground">
                 {chapter.province}, {chapter.city} ·{" "}
-                {rows.length} athlete{rows.length === 1 ? "" : "s"} ·{" "}
-                {formatPesos(rows.length * entryFeePesos)}
+                {approvedAthletes.length} approved athlete{approvedAthletes.length === 1 ? "" : "s"} ·{" "}
+                {order.items.length} pending
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {payment ? (
-              <Badge variant={proofStatusVariant(payment.status)}>
-                {proofStatusLabel(payment.status)}
-              </Badge>
-            ) : (
-              <Badge variant="outline">No payment</Badge>
-            )}
+            <Badge variant={proofStatusVariant(order.status)}>
+              {proofStatusLabel(order.status)}
+            </Badge>
           </div>
         </button>
 
@@ -105,20 +107,57 @@ export function ChapterCard({
               </div>
             </div>
 
-            <ul className="divide-y rounded-lg border bg-card">
-              {rows.map(({ id: enrollmentId, athlete }) => (
-                <li
-                  key={enrollmentId}
-                  className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
-                >
-                  <span className="font-medium">{athlete.name}</span>
-                  <span className="text-muted-foreground">
-                    {genderLabel(athlete.gender)} · born {athlete.birthYear}
-                    {athlete.weightKg > 0 ? ` · ${athlete.weightKg} kg` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            {order.items.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1">
+                  Pending order ({order.items.length}):
+                </p>
+                <ul className="divide-y rounded-lg border bg-card">
+                  {order.items.map(({ id: itemId, athlete }) => (
+                    <li
+                      key={itemId}
+                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                    >
+                      <span className="font-medium">{athlete.name}</span>
+                      <span className="text-muted-foreground">
+                        {genderLabel(athlete.gender)} · born {athlete.birthYear}
+                        {athlete.weightKg > 0 ? ` · ${athlete.weightKg} kg` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {approvedAthletes.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1">
+                  Approved ({approvedAthletes.length}):
+                </p>
+                <ul className="divide-y rounded-lg border bg-card">
+                  {approvedAthletes.map(({ athlete }) => (
+                    <li
+                      key={athlete.id}
+                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                    >
+                      <span className="font-medium">{athlete.name}</span>
+                      <Badge variant="default">Approved</Badge>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {latestPayment && (
+              <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+                <p>
+                  Payment: {formatPesos(latestPayment.amountPesos)} ·{" "}
+                  <Badge variant={proofStatusVariant(latestPayment.outcome)}>
+                    {proofStatusLabel(latestPayment.outcome)}
+                  </Badge>
+                </p>
+              </div>
+            )}
           </div>
         )}
       </CardContent>

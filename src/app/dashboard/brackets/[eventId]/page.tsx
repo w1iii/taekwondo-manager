@@ -5,7 +5,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatDate } from "@/lib/events";
-import { PaymentStatus } from "@/generated/prisma/client";
 import { BracketView } from "@/components/bracket-view";
 import { LiveBracketsRefresh } from "@/components/live-brackets-refresh";
 import { championsOf } from "@/lib/brackets";
@@ -34,14 +33,11 @@ export default async function BracketsCoachEventPage({
     cellsByDivision.set(cell.divisionId, list);
   }
 
-  const payments = await db.teamPayment.findMany({
-    where: {
-      eventId: event.id,
-      status: PaymentStatus.APPROVED,
-    },
-    select: { chapterId: true },
+  const approvedAthletes = await db.approvedAthlete.findMany({
+    where: { eventId: event.id },
+    select: { athleteId: true },
   });
-  const approvedChapters = new Set(payments.map((p) => p.chapterId));
+  const paidAthletes = new Set(approvedAthletes.map((a) => a.athleteId));
 
   const hasAny = event.divisions.some(
     (d) => (cellsByDivision.get(d.id)?.length ?? 0) > 0,
@@ -57,8 +53,8 @@ export default async function BracketsCoachEventPage({
           {formatDate(event.eventDate)}
         </p>
         <p className="text-xs text-muted-foreground">
-          <span className="text-emerald-600">Verified</span> = chapter payment
-          approved · <span className="text-amber-600">Pending</span> = not approved yet
+          <span className="text-emerald-600">Verified</span> = registration approved ·{" "}
+          <span className="text-amber-600">Pending</span> = not approved yet
         </p>
       </div>
 
@@ -73,7 +69,6 @@ export default async function BracketsCoachEventPage({
         event.divisions.map((division) => {
           const divisionCells = cellsByDivision.get(division.id) ?? [];
           if (divisionCells.length === 0) return null;
-          const approvedChaptersForEvent = approvedChapters;
           const names = namesFor(divisionCells);
           const champions = championsOf(divisionCells);
           return (
@@ -101,7 +96,7 @@ export default async function BracketsCoachEventPage({
                 <BracketView
                   cells={divisionCells}
                   nameById={names}
-                  verifiedById={verifiedFor(divisionCells, approvedChaptersForEvent)}
+                  verifiedById={verifiedFor(divisionCells, paidAthletes)}
                 />
               </CardContent>
             </Card>
@@ -123,13 +118,13 @@ function namesFor(
 }
 
 function verifiedFor(
-  cells: { athleteId?: string | null; athlete?: { id: string; chapterId: string } | null }[],
-  approvedChapters: Set<string>,
+  cells: { athleteId?: string | null; athlete?: { id: string } | null }[],
+  paidAthletes: Set<string>,
 ): Record<string, boolean> {
   const map: Record<string, boolean> = {};
   for (const cell of cells) {
     if (cell.athleteId && cell.athlete) {
-      map[cell.athleteId] = approvedChapters.has(cell.athlete.chapterId);
+      map[cell.athleteId] = paidAthletes.has(cell.athleteId);
     }
   }
   return map;

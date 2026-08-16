@@ -23,11 +23,17 @@ enum Gender {
   FEMALE
 }
 
-enum PaymentStatus {
+enum OrderStatus {
+  PENDING
+  PAID
+  APPROVED
+  REJECTED
+}
+
+enum PaymentOutcome {
   PENDING
   APPROVED
   REJECTED
-  CANCELLED
 }
 
 enum Role {
@@ -52,19 +58,19 @@ enum BeltType {
 }
 
 model Event {
-  id                   String      @id @default(cuid())
+  id                   String             @id @default(cuid())
   name                 String
   description          String?
   location             String
   imageUrl             String?
   eventDate            DateTime
   registrationDeadline DateTime
-  entryFeePesos        Int          @default(500)
-  status               EventStatus  @default(DRAFT)
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
-  enrollments          Enrollment[]
-  payments             TeamPayment[]
+  entryFeePesos        Int                @default(500)
+  status               EventStatus        @default(DRAFT)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  orders               Order[]
+  approvedAthletes     ApprovedAthlete[]
   divisions            Division[]
 
   @@index([status])
@@ -72,23 +78,22 @@ model Event {
 }
 
 model Athlete {
-  id          String       @id @default(cuid())
+  id          String          @id @default(cuid())
   chapterId   String
   name        String
   gender      Gender
   birthYear   Int
-  weightKg    Int          @default(0)
+  weightKg    Int             @default(0)
   beltType    BeltType?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  chapter     Chapter      @relation(fields: [chapterId], references: [id], onDelete: Cascade)
-  enrollments Enrollment[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  chapter     Chapter         @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  orderItems  OrderItem[]
+  approvedAthletes ApprovedAthlete[]
   bracketCells BracketCell[]
 
   @@index([chapterId])
   @@index([chapterId, gender])
-  // Accelerates the admin athletes list `name { contains, mode: insensitive }`
-  // filter (ILIKE '%q%'), which a plain btree index cannot serve.
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Athlete_name_trgm_idx")
 }
 
@@ -105,38 +110,71 @@ model WeightClass {
   @@index([gender, sortOrder])
 }
 
-model Enrollment {
-  id        String   @id @default(cuid())
-  eventId   String
-  athleteId String
-  chapterId String
-  createdAt DateTime @default(now())
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  athlete   Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
-  chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+model Order {
+  id          String             @id @default(cuid())
+  coachId     String
+  eventId     String
+  chapterId   String
+  status      OrderStatus        @default(PENDING)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  coach       Chapter            @relation("CoachOrders", fields: [coachId], references: [id], onDelete: Cascade)
+  event       Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  chapter     Chapter            @relation("ChapterOrders", fields: [chapterId], references: [id], onDelete: Cascade)
+  items       OrderItem[]
+  payments    PaymentAttempt[]
+  approvedAthletes ApprovedAthlete[]
 
-  @@unique([eventId, athleteId])
-  @@index([eventId])
-  @@index([chapterId])
+  @@index([eventId, chapterId])
+  @@index([status])
+  @@index([coachId])
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  athleteId   String
+
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  athlete     Athlete @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, athleteId])
+  @@index([orderId])
   @@index([athleteId])
 }
 
-model TeamPayment {
-  id              String        @id @default(cuid())
-  eventId         String
-  chapterId       String
-  amountPesos     Int
+model ApprovedAthlete {
+  id          String   @id @default(cuid())
+  eventId     String
+  chapterId   String
+  athleteId   String
+  orderId     String
+  approvedAt  DateTime @default(now())
+
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  chapter     Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  athlete     Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, athleteId])
+  @@index([chapterId])
+  @@index([eventId])
+}
+
+model PaymentAttempt {
+  id              String         @id @default(cuid())
+  orderId         String
   referenceNo     String
   proofUrl        String
-  status          PaymentStatus @default(PENDING)
+  amountPesos     Int
+  outcome         PaymentOutcome @default(PENDING)
   rejectionReason String?
-  submittedAt     DateTime      @default(now())
+  submittedAt     DateTime       @default(now())
   reviewedAt      DateTime?
-  event           Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  chapter         Chapter       @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  order           Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  @@unique([eventId, chapterId])
-  @@index([status])
+  @@index([orderId])
+  @@index([outcome])
 }
 
 model Division {
@@ -175,27 +213,23 @@ model BracketCell {
 }
 
 model Chapter {
-  id              String        @id @default(cuid())
+  id              String             @id @default(cuid())
   name            String
   province        String
   city            String
   gcashNumber     String
   logoUrl         String?
   headCoachName   String
-  // No @unique here: uniqueness for active rows is enforced by a partial
-  // unique index on (headCoachEmail) WHERE status IN ('PENDING','APPROVED'),
-  // created in migration 20260813173221_add_chapter. It allows a REJECTED
-  // chapter to free the email for re-registration. Prisma cannot express
-  // partial indexes in the schema.
   headCoachEmail  String
-  status          ChapterStatus @default(PENDING)
+  status          ChapterStatus      @default(PENDING)
   rejectionReason String?
   headCoachUserId String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
   athletes        Athlete[]
-  enrollments     Enrollment[]
-  payments        TeamPayment[]
+  coachOrders     Order[]            @relation("CoachOrders")
+  chapterOrders   Order[]            @relation("ChapterOrders")
+  approvedAthletes ApprovedAthlete[]
   notifications   Notification[]
 
   @@index([status])
@@ -217,8 +251,6 @@ model Notification {
   @@index([role, targetChapterId, readAt])
 }
 
-// Fixed-window rate limiter backed by Postgres (no external cache dependency).
-// One row per action:user key; windowStart resets when the window elapses.
 model RateLimit {
   id          String   @id @default(cuid())
   key         String   @unique
@@ -229,9 +261,6 @@ model RateLimit {
   @@index([windowStart])
 }
 
-// Lightweight usage analytics: one row per page view recorded by the client
-// beacon. role/userId are null for anonymous (public) views. Kept coarse —
-// dashboard/analytics aggregates counts, never per-visitor PII detail.
 model PageView {
   id        String   @id @default(cuid())
   path      String

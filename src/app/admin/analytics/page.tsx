@@ -3,7 +3,7 @@ import { Activity, Eye, Filter, Users } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { ChapterStatus, PaymentStatus } from "@/generated/prisma/client";
+import { ChapterStatus } from "@/generated/prisma/client";
 
 export const metadata = { title: "Analytics" };
 
@@ -13,7 +13,6 @@ function summarizePath(path: string): string {
   if (path === "/") return "/ (landing)";
   const segments = path.split("/");
   if (segments.length <= 2) return path;
-  // Collapse dynamic segments into a bucket: /dashboard/events/xyz → /dashboard/events/[id]
   const last = segments[segments.length - 1];
   if (last.length > 32 || /^[0-9a-f-]{20,}$/i.test(last)) {
     segments[segments.length - 1] = "[id]";
@@ -34,8 +33,8 @@ export default async function AnalyticsPage() {
     chapterSignups,
     approvedChapters,
     athletesAdded,
-    enrollments,
-    teamPayments,
+    orders,
+    paymentAttempts,
     approvedPayments,
   ] = await Promise.all([
     db.pageView.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
@@ -56,9 +55,9 @@ export default async function AnalyticsPage() {
     db.chapter.count(),
     db.chapter.count({ where: { status: ChapterStatus.APPROVED } }),
     db.athlete.count(),
-    db.enrollment.count(),
-    db.teamPayment.count(),
-    db.teamPayment.count({ where: { status: PaymentStatus.APPROVED } }),
+    db.order.count(),
+    db.paymentAttempt.count(),
+    db.paymentAttempt.count({ where: { outcome: "APPROVED" } }),
   ]);
 
   const topPaths: PathBucket[] = [];
@@ -73,13 +72,12 @@ export default async function AnalyticsPage() {
     topPaths.push({ path, views });
   }
 
-  // Registration funnel: from landing page to a completed payment.
   const funnel = [
     { label: "Chapter registrations", value: chapterSignups, hint: "Chapters created" },
     { label: "Chapters approved", value: approvedChapters, hint: "By organizer" },
     { label: "Athletes added", value: athletesAdded, hint: "Across all rosters" },
-    { label: "Event enrollments", value: enrollments, hint: "Athletes entered" },
-    { label: "Payments submitted", value: teamPayments, hint: "For enrolled teams" },
+    { label: "Event orders", value: orders, hint: "Teams entered" },
+    { label: "Payments submitted", value: paymentAttempts, hint: "For registered teams" },
     { label: "Payments approved", value: approvedPayments, hint: "Fully onboarded" },
   ];
   const maxFunnel = Math.max(1, ...funnel.map((f) => f.value));

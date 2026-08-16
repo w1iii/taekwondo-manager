@@ -45,12 +45,18 @@ export default async function AdminEventBracketsPage({
     where: { id: eventId, status: EventStatus.PUBLISHED },
     include: {
       divisions: { include: { weightClass: true } },
-      enrollments: { include: { athlete: true } },
     },
   });
   if (!event) notFound();
 
-  const allAthletes = event.enrollments.map((e) => e.athlete);
+  const entries = await db.approvedAthlete.findMany({
+    where: {
+      eventId,
+    },
+    include: { athlete: true },
+  });
+
+  const allAthletes = entries.map((e) => e.athlete);
 
   let filtered = allAthletes;
 

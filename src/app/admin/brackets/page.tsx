@@ -13,14 +13,32 @@ import { unstable_cache } from "next/cache";
 export const metadata = { title: "Brackets" };
 
 async function getAdminBracketsEvents() {
-  return db.event.findMany({
+  const events = await db.event.findMany({
     where: { status: EventStatus.PUBLISHED },
     include: {
       divisions: true,
-      _count: { select: { enrollments: true } },
+      _count: { select: { orders: true } },
     },
     orderBy: { eventDate: "desc" },
   });
+
+  const eventIds = events.map((e) => e.id);
+  const approvedCounts = await db.approvedAthlete.groupBy({
+    by: ["eventId"],
+    where: { eventId: { in: eventIds } },
+    _count: { _all: true },
+  });
+  const approvedCountByEvent = new Map(
+    approvedCounts.map((c) => [c.eventId, c._count._all]),
+  );
+
+  return events.map((e) => ({
+    ...e,
+    _count: {
+      orders: e._count.orders,
+      totalEntries: approvedCountByEvent.get(e.id) ?? 0,
+    },
+  }));
 }
 
 const getCachedAdminBracketsEvents = unstable_cache(getAdminBracketsEvents, ["admin-brackets-events"], {
@@ -69,8 +87,8 @@ export default async function BracketsAdminPage() {
                     <CalendarDays className="mr-1 inline size-3.5" />
                     {formatDate(event.eventDate)} ·{" "}
                     <Users className="mr-1 inline size-3.5" />
-                    {event._count.enrollments} athlete
-                    {event._count.enrollments === 1 ? "" : "s"} ·{" "}
+                    {event._count.totalEntries} athlete
+                    {event._count.totalEntries === 1 ? "" : "s"} ·{" "}
                     {event.divisions.length} division
                     {event.divisions.length === 1 ? "" : "s"}
                   </p>

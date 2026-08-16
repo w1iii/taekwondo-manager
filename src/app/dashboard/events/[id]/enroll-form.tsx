@@ -9,9 +9,9 @@ import { Button } from "@/components/ui/button";
 import { formatPesos } from "@/lib/events";
 import { genderLabel } from "@/lib/athletes";
 import type { Athlete } from "@/generated/prisma/client";
-import type { EnrollState } from "../actions";
+import type { RegisterState } from "../actions";
 
-const initialState: EnrollState = { ok: false, error: "" };
+const initialState: RegisterState = { ok: false, error: "" };
 
 export function EnrollForm({
   eventId,
@@ -22,11 +22,11 @@ export function EnrollForm({
   eventId: string;
   fee: number;
   athletes: Athlete[];
-  action: (formData: FormData) => Promise<EnrollState>;
+  action: (formData: FormData) => Promise<RegisterState>;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [state, formAction, pending] = useActionState(
-    (_prev: EnrollState, formData: FormData) => action(formData),
+    (_prev: RegisterState, formData: FormData) => action(formData),
     initialState,
   );
   const router = useRouter();
@@ -85,7 +85,7 @@ export function EnrollForm({
       </div>
 
       {state.ok ? (
-        <p className="text-sm text-emerald-600">Registered. Roster updated below.</p>
+        <p className="text-sm text-emerald-600">Order created. Go to Payments to submit proof.</p>
       ) : state.error ? (
         <p role="alert" className="text-sm text-destructive">
           {state.error}
@@ -94,7 +94,7 @@ export function EnrollForm({
 
       <Button type="submit" disabled={pending || selected.length === 0}>
         {pending ? <Loader2 className="animate-spin" /> : null}
-        {pending ? "Registering…" : "Register selected athletes"}
+        {pending ? "Creating order…" : "Create order"}
       </Button>
     </form>
   );

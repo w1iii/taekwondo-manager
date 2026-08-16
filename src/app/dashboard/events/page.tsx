@@ -39,17 +39,14 @@ export default async function EventsCoachPage() {
 
   const upcoming = events.filter((e) => isEventUpcoming(e.eventDate));
 
-  const enrolledByEvent = chapter
-    ? await db.enrollment.groupBy({
-        by: ["eventId"],
+  const registrationsByEvent = chapter
+    ? await db.order.findMany({
         where: { chapterId: chapter.id },
-        _count: { _all: true },
+        select: { eventId: true },
       })
     : [];
 
-  const enrolledMap = new Map(
-    enrolledByEvent.map((g) => [g.eventId, g._count._all]),
-  );
+  const registeredEventIds = new Set(registrationsByEvent.map((r) => r.eventId));
 
   return (
     <div className="space-y-4">
@@ -103,14 +100,14 @@ export default async function EventsCoachPage() {
                 </p>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground">
-                    {enrolledMap.get(event.id) ?? 0} registered from your chapter
+                    {registeredEventIds.has(event.id) ? "Registered" : "Not registered"}
                   </p>
                   {isRegistrationOpen(event.registrationDeadline) ? (
                     <Button
                       render={<Link href={`/dashboard/events/${event.id}`} />}
                       size="sm"
                     >
-                      Register
+                      {registeredEventIds.has(event.id) ? "View" : "Register"}
                     </Button>
                   ) : (
                     <span className="text-xs text-muted-foreground">Registration closed</span>

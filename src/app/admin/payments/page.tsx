@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { formatDate, formatPesos } from "@/lib/events";
-import { PaymentStatus } from "@/generated/prisma/client";
+
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { requireRole } from "@/lib/auth";
@@ -17,11 +17,10 @@ import {
 
 export const metadata = { title: "Payments" };
 
-const STATUS_LABELS: Record<PaymentStatus, string> = {
+const STATUS_LABELS: Record<string, string> = {
   PENDING: "Pending",
   APPROVED: "Approved",
   REJECTED: "Rejected",
-  CANCELLED: "Cancelled",
 };
 
 function PaymentCard({
@@ -34,10 +33,14 @@ function PaymentCard({
       <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-start">
         <div className="min-w-0 flex-1 space-y-1 text-sm">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold">{payment.chapter.name}</span>
-            <span className="text-muted-foreground">· {payment.event.name}</span>
+            <span className="font-semibold">{payment.order.chapter.name}</span>
+            <span className="text-muted-foreground">
+              · {payment.order.event.name}
+            </span>
           </div>
           <p className="text-muted-foreground">
+            {payment.order.items.length} athlete
+            {payment.order.items.length === 1 ? "" : "s"} ·{" "}
             {formatPesos(payment.amountPesos)} · Reference: {payment.referenceNo}
           </p>
           <p className="text-muted-foreground">
@@ -59,11 +62,11 @@ function PaymentCard({
         </div>
 
         <div className="sm:shrink-0">
-          {payment.status === PaymentStatus.PENDING ? (
+          {payment.outcome === "PENDING" ? (
             <PaymentReviewActions id={payment.id} />
           ) : (
             <span className="text-xs font-medium text-muted-foreground">
-              {STATUS_LABELS[payment.status]}
+              {STATUS_LABELS[payment.outcome] ?? payment.outcome}
             </span>
           )}
         </div>
@@ -92,13 +95,21 @@ function Section({
   );
 }
 
-async function loadPayments(status: PaymentStatus, page: number) {
-  return db.teamPayment.findMany({
-    where: { status },
+async function loadPayments(outcome: string, page: number) {
+  return db.paymentAttempt.findMany({
+    where: { outcome: outcome as "PENDING" | "APPROVED" | "REJECTED" },
     orderBy: { submittedAt: "desc" },
     skip: (page - 1) * PAGE_SIZE,
     take: PAGE_SIZE,
-    include: { event: true, chapter: true },
+    include: {
+      order: {
+        include: {
+          event: true,
+          chapter: true,
+          items: true,
+        },
+      },
+    },
   });
 }
 
@@ -118,14 +129,14 @@ export default async function PaymentsAdminPage({
   const [[pendingCount, approvedCount, rejectedCount], [pending, approved, rejected]] =
     await Promise.all([
       Promise.all([
-        db.teamPayment.count({ where: { status: PaymentStatus.PENDING } }),
-        db.teamPayment.count({ where: { status: PaymentStatus.APPROVED } }),
-        db.teamPayment.count({ where: { status: PaymentStatus.REJECTED } }),
+        db.paymentAttempt.count({ where: { outcome: "PENDING" } }),
+        db.paymentAttempt.count({ where: { outcome: "APPROVED" } }),
+        db.paymentAttempt.count({ where: { outcome: "REJECTED" } }),
       ]),
       Promise.all([
-        loadPayments(PaymentStatus.PENDING, parsePage(params.pending)),
-        loadPayments(PaymentStatus.APPROVED, parsePage(params.approved)),
-        loadPayments(PaymentStatus.REJECTED, parsePage(params.rejected)),
+        loadPayments("PENDING", parsePage(params.pending)),
+        loadPayments("APPROVED", parsePage(params.approved)),
+        loadPayments("REJECTED", parsePage(params.rejected)),
       ]),
     ]);
 

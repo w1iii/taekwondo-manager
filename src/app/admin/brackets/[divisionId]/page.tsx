@@ -37,11 +37,12 @@ export default async function DivisionBracketPage({
     orderBy: [{ round: "desc" }, { position: "asc" }],
   });
 
-  const enrollments = await db.enrollment.findMany({
+  const approvedAthletes = await db.approvedAthlete.findMany({
     where: { eventId: division.event.id },
     include: { athlete: true },
-    orderBy: { createdAt: "asc" },
+    orderBy: { approvedAt: "asc" },
   });
+
   const participantIds = new Set(
     athletesInDivision(
       {
@@ -53,12 +54,12 @@ export default async function DivisionBracketPage({
         weightClass: division.weightClass,
       },
       division.event.eventDate.getFullYear(),
-      enrollments.map((e) => e.athlete),
+      approvedAthletes.map((a) => a.athlete),
     ).map((a) => a.id),
   );
-  const participants = enrollments
-    .filter((e) => participantIds.has(e.athlete.id))
-    .map((e) => e.athlete);
+  const participants = approvedAthletes
+    .filter((a) => participantIds.has(a.athlete.id))
+    .map((a) => a.athlete);
 
   const nameById: Record<string, string> = {};
   for (const cell of cells) {

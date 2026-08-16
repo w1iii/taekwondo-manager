@@ -8,11 +8,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { requireRole } from "@/lib/auth";
 import { getChapterForUser } from "@/lib/chapters";
 import { db } from "@/lib/db";
-import { formatDate, formatPesos } from "@/lib/events";
+import { formatDate } from "@/lib/events";
 import { genderLabel } from "@/lib/athletes";
 import { athletesInDivision } from "@/lib/divisions";
-import { proofStatusLabel, proofStatusVariant } from "@/lib/payments";
-import { PaymentStatus } from "@/generated/prisma/client";
 
 export const metadata = { title: "Athlete" };
 
@@ -32,17 +30,14 @@ export default async function AthleteDetailPage({
   });
   if (!athlete) notFound();
 
-  const enrollments = await db.enrollment.findMany({
+  const approvedEntries = await db.approvedAthlete.findMany({
     where: { athleteId: id, chapterId: chapter.id },
-    include: { event: { include: { divisions: { include: { weightClass: true } } } } },
-    orderBy: { createdAt: "desc" },
+    include: {
+      event: { include: { divisions: { include: { weightClass: true } } } },
+      order: { select: { status: true } },
+    },
+    orderBy: { approvedAt: "desc" },
   });
-
-  const eventIds = enrollments.map((e) => e.eventId);
-  const payments = await db.teamPayment.findMany({
-    where: { chapterId: chapter.id, eventId: { in: eventIds } },
-  });
-  const paymentByEvent = new Map(payments.map((p) => [p.eventId, p]));
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6">
@@ -76,10 +71,10 @@ export default async function AthleteDetailPage({
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Tournaments · {enrollments.length}
+          Tournaments · {approvedEntries.length}
         </h2>
 
-        {enrollments.length === 0 ? (
+        {approvedEntries.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground">
               <Trophy className="size-8" />
@@ -88,7 +83,7 @@ export default async function AthleteDetailPage({
           </Card>
         ) : (
           <ul className="space-y-3">
-            {enrollments.map(({ id: enrollmentId, event }) => {
+            {approvedEntries.map(({ id: entryId, event }) => {
               const year = event.eventDate.getFullYear();
               const divisions = event.divisions.filter((d) =>
                 athletesInDivision(
@@ -104,10 +99,9 @@ export default async function AthleteDetailPage({
                   [athlete],
                 ).length > 0,
               );
-              const payment = paymentByEvent.get(event.id);
 
               return (
-                <li key={enrollmentId} className="rounded-lg border bg-card p-4">
+                <li key={entryId} className="rounded-lg border bg-card p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-1 text-sm">
                       <p className="flex items-center gap-2 font-medium">
@@ -130,30 +124,14 @@ export default async function AthleteDetailPage({
                     </div>
 
                     <div className="flex flex-col items-end gap-1">
-                      {payment ? (
-                        <Badge variant={proofStatusVariant(payment.status)}>
-                          {proofStatusLabel(payment.status)}
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline">No payment</Badge>
-                      )}
-                      {payment?.status === PaymentStatus.APPROVED ? (
-                        <span className="text-xs text-emerald-600">Verified</span>
-                      ) : (
-                        <span className="text-xs text-amber-600">Pending</span>
-                      )}
+                      <Badge variant="default">Approved</Badge>
+                      <span className="text-xs text-emerald-600">Verified</span>
                     </div>
                   </div>
 
-                  {payment ? (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Team payment {formatPesos(payment.amountPesos)}
-                    </p>
-                  ) : (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Entry fee applies once the chapter submits team payment.
-                    </p>
-                  )}
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Registration confirmed.
+                  </p>
                 </li>
               );
             })}

@@ -39,13 +39,19 @@ export default async function DivisionsPage({
     where: { id: eventId, status: EventStatus.PUBLISHED },
     include: {
       divisions: { include: { weightClass: true } },
-      enrollments: { include: { athlete: true } },
     },
   });
   if (!event) notFound();
 
+  const entries = await db.approvedAthlete.findMany({
+    where: {
+      eventId,
+    },
+    include: { athlete: true },
+  });
+
   const year = event.eventDate.getFullYear();
-  const enrollments = event.enrollments.map((e) => e.athlete);
+  const athletes = entries.map((e) => e.athlete);
   const divisionIds = event.divisions.map((d) => d.id);
   const cellCounts = await db.bracketCell.groupBy({
     by: ["divisionId"],
@@ -219,7 +225,7 @@ export default async function DivisionsPage({
                   weightClass: division.weightClass,
                 },
                 year,
-                enrollments,
+                athletes,
               ).length;
               const hasBracket = (cellCountByDivision.get(division.id) ?? 0) > 0;
               return (

@@ -14,15 +14,13 @@ import type { PaymentFormState } from "@/lib/payments";
 const initialState: PaymentFormState = { ok: false, error: "" };
 
 export function PaymentForm({
-  eventId,
+  orderId,
   action,
   defaultReference,
-  resubmitting,
 }: {
-  eventId: string;
+  orderId: string;
   action: (formData: FormData) => Promise<PaymentFormState>;
   defaultReference?: string;
-  resubmitting?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(
     (_prev: PaymentFormState, formData: FormData) => action(formData),
@@ -48,12 +46,12 @@ export function PaymentForm({
 
   return (
     <form action={handleSubmit} className="space-y-4">
-      <input type="hidden" name="eventId" value={eventId} />
+      <input type="hidden" name="orderId" value={orderId} />
 
       <div className="space-y-1.5">
-        <Label htmlFor={`ref-${eventId}`}>GCash reference number</Label>
+        <Label htmlFor={`ref-${orderId}`}>GCash reference number</Label>
         <Input
-          id={`ref-${eventId}`}
+          id={`ref-${orderId}`}
           name="referenceNo"
           placeholder="e.g. 4412 9912 0193"
           defaultValue={defaultReference}
@@ -64,9 +62,9 @@ export function PaymentForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor={`proof-${eventId}`}>Proof of payment (screenshot)</Label>
+        <Label htmlFor={`proof-${orderId}`}>Proof of payment (screenshot)</Label>
         <Input
-          id={`proof-${eventId}`}
+          id={`proof-${orderId}`}
           name="proof"
           type="file"
           accept="image/*"
@@ -86,11 +84,7 @@ export function PaymentForm({
 
       <Button type="submit" disabled={pending}>
         {pending ? <Loader2 className="animate-spin" /> : <Receipt />}
-        {pending
-          ? "Submitting…"
-          : resubmitting
-            ? "Resubmit payment"
-            : "Submit payment"}
+        {pending ? "Submitting…" : "Submit payment"}
       </Button>
     </form>
   );

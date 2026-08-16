@@ -3,23 +3,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
-  enrollAthletes,
-  unenrollAthlete,
+  registerAthletes,
+  removeAthlete,
 } from "@/app/dashboard/events/actions";
 import { submitPayment } from "@/app/dashboard/payments/actions";
+import { approvePayment } from "@/app/admin/payments/actions";
 import {
   generateBracket,
   generateDivisions,
   recordWinner,
 } from "@/app/admin/brackets/actions";
 import { setEventStatus } from "@/app/admin/events/actions";
-import { EventStatus, ChapterStatus, PaymentStatus } from "@/generated/prisma/client";
+import { EventStatus, ChapterStatus, PaymentOutcome } from "@/generated/prisma/client";
 
 import {
   resetDb,
   seedAthletes,
   seedChapter,
-  seedEnrollment,
+  seedApprovedAthlete,
   seedEvent,
   seedWeightClasses,
   type TestCoach,
@@ -37,13 +38,13 @@ const organizer: TestCoach = {
   role: "organizer",
 };
 
-describe("enrollAthletes", () => {
+describe("registerAthletes", () => {
   beforeEach(async () => {
     await resetDb();
     vi.mocked(requireRole).mockResolvedValue(coach as never);
   });
 
-  it("enrolls owned athletes into a published event", async () => {
+  it("creates an order with athletes for a published event", async () => {
     const chapter = await seedChapter();
     const athletes = await seedAthletes(chapter.id, 2);
     const event = await seedEvent();
@@ -52,12 +53,16 @@ describe("enrollAthletes", () => {
     form.set("eventId", event.id);
     for (const a of athletes) form.append("athleteId", a.id);
 
-    const result = await enrollAthletes(form);
+    const result = await registerAthletes(form);
     expect(result).toEqual({ ok: true });
 
-    const rows = await db.enrollment.findMany({ where: { eventId: event.id } });
-    expect(rows.length).toBe(2);
-    expect(rows.every((r) => r.chapterId === chapter.id)).toBe(true);
+    const order = await db.order.findFirst({
+      where: { eventId: event.id, chapterId: chapter.id },
+      include: { items: true },
+    });
+    expect(order).not.toBeNull();
+    expect(order!.items.length).toBe(2);
+    expect(order!.status).toBe("PENDING");
   });
 
   it("rejects athletes that are not on the chapter roster", async () => {
@@ -74,7 +79,7 @@ describe("enrollAthletes", () => {
     form.append("athleteId", own.id);
     form.append("athleteId", alien.id);
 
-    const result = await enrollAthletes(form);
+    const result = await registerAthletes(form);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/not on your roster/i);
   });
@@ -88,7 +93,7 @@ describe("enrollAthletes", () => {
     form.set("eventId", event.id);
     form.append("athleteId", athletes[0].id);
 
-    const result = await enrollAthletes(form);
+    const result = await registerAthletes(form);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/not open for registration/i);
   });
@@ -108,7 +113,7 @@ describe("enrollAthletes", () => {
     form.set("eventId", event.id);
     form.append("athleteId", athletes[0].id);
 
-    const result = await enrollAthletes(form);
+    const result = await registerAthletes(form);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/has closed/i);
   });
@@ -117,44 +122,66 @@ describe("enrollAthletes", () => {
     const event = await seedEvent();
     const form = new FormData();
     form.set("eventId", event.id);
-    const result = await enrollAthletes(form);
+    const result = await registerAthletes(form);
     expect(result.ok).toBe(false);
+  });
+
+  it("rejects if there is already a pending order", async () => {
+    const chapter = await seedChapter();
+    const athletes = await seedAthletes(chapter.id, 1);
+    const event = await seedEvent();
+
+    const form1 = new FormData();
+    form1.set("eventId", event.id);
+    form1.append("athleteId", athletes[0].id);
+    await registerAthletes(form1);
+
+    const athletes2 = await seedAthletes(chapter.id, 1, { birthYear: 2020 });
+    const form2 = new FormData();
+    form2.set("eventId", event.id);
+    form2.append("athleteId", athletes2[0].id);
+    const result = await registerAthletes(form2);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/already have an active order/i);
   });
 });
 
-describe("unenrollAthlete", () => {
+describe("removeAthlete", () => {
   beforeEach(async () => {
     await resetDb();
     vi.mocked(requireRole).mockResolvedValue(coach as never);
   });
 
-  it("removes an enrollment the chapter owns", async () => {
+  it("removes an item from a pending order", async () => {
     const chapter = await seedChapter();
     const [athlete] = await seedAthletes(chapter.id, 1);
     const event = await seedEvent();
-    const enrollment = await seedEnrollment(event.id, chapter.id, athlete.id);
+
+    await registerAthletes(
+      Object.assign(new FormData(), {
+        get: () => null,
+        getAll: () => [],
+      } as unknown as FormData),
+    );
 
     const form = new FormData();
-    form.set("id", enrollment.id);
-    await unenrollAthlete(form);
+    form.set("eventId", event.id);
+    form.append("athleteId", athlete.id);
+    await registerAthletes(form);
 
-    const left = await db.enrollment.count({ where: { id: enrollment.id } });
-    expect(left).toBe(0);
-  });
+    const order = await db.order.findFirst({
+      where: { eventId: event.id, chapterId: chapter.id },
+    });
+    const item = await db.orderItem.findFirst({
+      where: { orderId: order!.id },
+    });
 
-  it("does not remove an enrollment of another chapter", async () => {
-    const chapter = await seedChapter();
-    const other = await seedChapter({ headCoachEmail: "other@test.ph" });
-    const [athlete] = await seedAthletes(other.id, 1);
-    const event = await seedEvent();
-    const enrollment = await seedEnrollment(event.id, other.id, athlete.id);
+    const removeForm = new FormData();
+    removeForm.set("itemId", item!.id);
+    await removeAthlete(removeForm);
 
-    const form = new FormData();
-    form.set("id", enrollment.id);
-    await unenrollAthlete(form);
-
-    expect(chapter.id).not.toBe(other.id);
-    expect(await db.enrollment.count({ where: { id: enrollment.id } })).toBe(1);
+    const deleted = await db.orderItem.findUnique({ where: { id: item!.id } });
+    expect(deleted).toBeNull();
   });
 });
 
@@ -168,54 +195,78 @@ describe("submitPayment", () => {
     return new File([new Uint8Array(1024)], "proof.png", { type: "image/png" });
   }
 
-  it("creates a pending payment for a chapter with enrolled athletes", async () => {
+  it("creates a pending payment for an order with athletes", async () => {
     const chapter = await seedChapter();
     const [athlete] = await seedAthletes(chapter.id, 2);
     const event = await seedEvent();
-    await seedEnrollment(event.id, chapter.id, athlete.id);
 
     const form = new FormData();
     form.set("eventId", event.id);
-    form.set("referenceNo", "4412 9912");
-    form.set("proof", proofFile());
+    form.append("athleteId", athlete.id);
+    await registerAthletes(form);
 
-    const result = await submitPayment(form);
+    const order = await db.order.findFirst({
+      where: { eventId: event.id, chapterId: chapter.id },
+    });
+
+    const payForm = new FormData();
+    payForm.set("orderId", order!.id);
+    payForm.set("referenceNo", "4412 9912");
+    payForm.set("proof", proofFile());
+
+    const result = await submitPayment(payForm);
     expect(result).toEqual({ ok: true });
 
-    const payment = await db.teamPayment.findUnique({
-      where: { eventId_chapterId: { eventId: event.id, chapterId: chapter.id } },
+    const payment = await db.paymentAttempt.findFirst({
+      where: { order: { eventId: event.id, chapterId: chapter.id } },
     });
     expect(payment).not.toBeNull();
-    expect(payment!.status).toBe(PaymentStatus.PENDING);
-    expect(payment!.amountPesos).toBe(500); // 1 enrolled athlete × ₱500
+    expect(payment!.outcome).toBe(PaymentOutcome.PENDING);
+    expect(payment!.amountPesos).toBe(500);
   });
 
   it("blocks a second submission while the first is pending", async () => {
     const chapter = await seedChapter();
     const [athlete] = await seedAthletes(chapter.id, 1);
     const event = await seedEvent();
-    await seedEnrollment(event.id, chapter.id, athlete.id);
+
+    const form = new FormData();
+    form.set("eventId", event.id);
+    form.append("athleteId", athlete.id);
+    await registerAthletes(form);
+
+    const order = await db.order.findFirst({
+      where: { eventId: event.id, chapterId: chapter.id },
+    });
 
     const first = new FormData();
-    first.set("eventId", event.id);
+    first.set("orderId", order!.id);
     first.set("referenceNo", "4412 9912");
     first.set("proof", proofFile());
     await submitPayment(first);
 
     const second = new FormData();
-    second.set("eventId", event.id);
+    second.set("orderId", order!.id);
     second.set("referenceNo", "4412 9913");
     second.set("proof", proofFile());
     const result = await submitPayment(second);
     expect(result.ok).toBe(false);
   });
 
-  it("rejects when no athletes are enrolled", async () => {
+  it("rejects when no athletes are in the order", async () => {
     const chapter = await seedChapter();
     const event = await seedEvent();
 
+    const order = await db.order.create({
+      data: {
+        eventId: event.id,
+        chapterId: chapter.id,
+        coachId: chapter.id,
+      },
+    });
+
     const form = new FormData();
-    form.set("eventId", event.id);
+    form.set("orderId", order.id);
     form.set("referenceNo", "4412 9912");
     form.set("proof", proofFile());
 
@@ -229,15 +280,74 @@ describe("submitPayment", () => {
     const chapter = await seedChapter();
     const [athlete] = await seedAthletes(chapter.id, 1);
     const event = await seedEvent();
-    await seedEnrollment(event.id, chapter.id, athlete.id);
 
     const form = new FormData();
     form.set("eventId", event.id);
-    form.set("referenceNo", "4412 9912");
-    form.set("proof", new File([new Uint8Array(100)], "proof.txt", { type: "text/plain" }));
+    form.append("athleteId", athlete.id);
+    await registerAthletes(form);
 
-    const result = await submitPayment(form);
+    const order = await db.order.findFirst({
+      where: { eventId: event.id, chapterId: chapter.id },
+    });
+
+    const payForm = new FormData();
+    payForm.set("orderId", order!.id);
+    payForm.set("referenceNo", "4412 9912");
+    payForm.set("proof", new File([new Uint8Array(100)], "proof.txt", { type: "text/plain" }));
+
+    const result = await submitPayment(payForm);
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("approvePayment", () => {
+  beforeEach(async () => {
+    await resetDb();
+    vi.mocked(requireRole).mockResolvedValue(organizer as never);
+  });
+
+  it("approves payment and moves athletes to ApprovedAthlete", async () => {
+    vi.mocked(requireRole).mockResolvedValue(coach as never);
+    const chapter = await seedChapter();
+    const [athlete] = await seedAthletes(chapter.id, 2);
+    const event = await seedEvent();
+
+    const form = new FormData();
+    form.set("eventId", event.id);
+    form.append("athleteId", athlete.id);
+    await registerAthletes(form);
+
+    const order = await db.order.findFirst({
+      where: { eventId: event.id, chapterId: chapter.id },
+      include: { items: true },
+    });
+
+    const payForm = new FormData();
+    payForm.set("orderId", order!.id);
+    payForm.set("referenceNo", "4412 9912");
+    payForm.set("proof", new File([new Uint8Array(1024)], "proof.png", { type: "image/png" }));
+    await submitPayment(payForm);
+
+    vi.mocked(requireRole).mockResolvedValue(organizer as never);
+
+    const payment = await db.paymentAttempt.findFirst({
+      where: { orderId: order!.id },
+    });
+
+    const approveForm = new FormData();
+    approveForm.set("id", payment!.id);
+    await approvePayment(approveForm);
+
+    const approved = await db.approvedAthlete.findMany({
+      where: { eventId: event.id, chapterId: chapter.id },
+    });
+    expect(approved.length).toBe(1);
+
+    const updatedOrder = await db.order.findUnique({ where: { id: order!.id } });
+    expect(updatedOrder!.status).toBe("APPROVED");
+
+    const items = await db.orderItem.findMany({ where: { orderId: order!.id } });
+    expect(items.length).toBe(0);
   });
 });
 
@@ -247,12 +357,12 @@ describe("generateDivisions + generateBracket", () => {
     vi.mocked(requireRole).mockResolvedValue(organizer as never);
   });
 
-  it("generates divisions for a published event with enrollments", async () => {
+  it("generates divisions for a published event with approved athletes", async () => {
     await seedWeightClasses();
     const chapter = await seedChapter();
     const athletes = await seedAthletes(chapter.id, 6, { gender: "MALE", birthYear: 2011 });
     const event = await seedEvent();
-    for (const a of athletes) await seedEnrollment(event.id, chapter.id, a.id);
+    for (const a of athletes) await seedApprovedAthlete(event.id, chapter.id, a.id);
 
     const form = new FormData();
     form.set("eventId", event.id);
@@ -268,7 +378,7 @@ describe("generateDivisions + generateBracket", () => {
     const chapter = await seedChapter();
     const athletes = await seedAthletes(chapter.id, 6, { gender: "MALE", birthYear: 2011 });
     const event = await seedEvent();
-    for (const a of athletes) await seedEnrollment(event.id, chapter.id, a.id);
+    for (const a of athletes) await seedApprovedAthlete(event.id, chapter.id, a.id);
 
     const divForm = new FormData();
     divForm.set("eventId", event.id);
@@ -327,7 +437,6 @@ describe("recordWinner", () => {
     await setEventStatus(published);
 
     const notifs = await db.notification.findMany({ where: { role: "COACH" } });
-    // Only the two APPROVED chapters get notified; DRAFT/PENDING/REJECTED do not.
     expect(notifs).toHaveLength(2);
     expect(notifs.every((n) => n.title === "Registration open")).toBe(true);
     expect(notifs.every((n) => n.link === "/dashboard/events")).toBe(true);
@@ -338,7 +447,7 @@ describe("recordWinner", () => {
     const chapter = await seedChapter();
     const athletes = await seedAthletes(chapter.id, 6, { gender: "MALE", birthYear: 2011 });
     const event = await seedEvent();
-    for (const a of athletes) await seedEnrollment(event.id, chapter.id, a.id);
+    for (const a of athletes) await seedApprovedAthlete(event.id, chapter.id, a.id);
 
     const divForm = new FormData();
     divForm.set("eventId", event.id);
@@ -353,9 +462,6 @@ describe("recordWinner", () => {
     await generateBracket(bracketForm);
 
     const cells = await db.bracketCell.findMany({ where: { divisionId: division!.id } });
-    // First-round match with two real athletes fed in (both children hold
-    // athleteIds). Semi-final cells also match "two children, no athleteId",
-    // but their children are matches, not athletes — so filter on that too.
     const match = cells.find((c) => {
       if (!c.childAId || !c.childBId || c.athleteId) return false;
       const childA = cells.find((cell) => cell.id === c.childAId)!;

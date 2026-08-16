@@ -1,5 +1,4 @@
 import { Badge } from "@/components/ui/badge";
-import { PaymentStatus } from "@/generated/prisma/client";
 import { proofStatusLabel, proofStatusVariant } from "@/lib/payments";
 
 export function ProofView({
@@ -13,7 +12,7 @@ export function ProofView({
   paymentId: string;
   referenceNo: string;
   amount: string;
-  status: PaymentStatus;
+  status: string;
   submitted: string;
   rejectionReason?: string | null;
 }) {

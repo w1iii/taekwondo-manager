@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { CalendarDays, MapPin, Tag, X } from "lucide-react";
+import { CalendarDays, MapPin, Tag } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import {
   isRegistrationOpen,
 } from "@/lib/events";
 import { EventStatus } from "@/generated/prisma/client";
-import { enrollAthletes, unenrollAthlete } from "../actions";
+import { registerAthletes } from "../actions";
 import { EnrollForm } from "./enroll-form";
 
 export const metadata = { title: "Register for event" };
@@ -36,14 +36,35 @@ export default async function EventRegisterPage({
   });
   if (!event) notFound();
 
-  const registered = chapter
-    ? await db.enrollment.findMany({
+  const order = chapter
+    ? await db.order.findFirst({
+        where: {
+          eventId: id,
+          chapterId: chapter.id,
+          status: { in: ["PENDING", "PAID"] },
+        },
+        include: {
+          items: {
+            include: { athlete: true },
+            orderBy: { id: "asc" },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      })
+    : null;
+
+  const approvedAthletes = chapter
+    ? await db.approvedAthlete.findMany({
         where: { eventId: id, chapterId: chapter.id },
         include: { athlete: true },
+        orderBy: { approvedAt: "asc" },
       })
     : [];
 
-  const registeredIds = new Set(registered.map((e) => e.athleteId));
+  const registeredIds = new Set([
+    ...order?.items.map((i) => i.athleteId) ?? [],
+    ...approvedAthletes.map((a) => a.athleteId),
+  ]);
 
   const eligible = chapter
     ? await db.athlete.findMany({
@@ -107,49 +128,66 @@ export default async function EventRegisterPage({
         </CardContent>
       </Card>
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Registered · {registered.length}
-        </h2>
-        {registered.length === 0 ? (
+      {order && order.items.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Pending order · {order.items.length} athlete{order.items.length === 1 ? "" : "s"}
+          </h2>
           <Card>
-            <CardContent className="text-sm text-muted-foreground">
-              No athletes registered for this event yet.
+            <CardContent>
+              <ul className="space-y-2">
+                {order.items.map(({ id: itemId, athlete }) => (
+                  <li
+                    key={itemId}
+                    className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3 text-sm"
+                  >
+                    <span>
+                      <span className="font-medium">{athlete.name}</span>
+                      <span className="ml-2 text-muted-foreground">
+                        {athlete.gender === "MALE" ? "Male" : "Female"} · born{" "}
+                        {athlete.birthYear}
+                      </span>
+                    </span>
+                    <Badge variant="secondary">In order</Badge>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-3">
+                <Button render={<Link href="/dashboard/payments" />} size="sm">
+                  Go to payments
+                </Button>
+              </div>
             </CardContent>
           </Card>
-        ) : (
-          <ul className="space-y-2">
-            {registered.map(({ id: enrollmentId, athlete }) => (
-              <li
-                key={enrollmentId}
-                className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3 text-sm"
-              >
-                <span>
-                  <span className="font-medium">{athlete.name}</span>
-                  <span className="ml-2 text-muted-foreground">
-                    {athlete.gender === "MALE" ? "Male" : "Female"} · born{" "}
-                    {athlete.birthYear}
-                  </span>
-                </span>
-                {open ? (
-                  <form action={unenrollAthlete}>
-                    <input type="hidden" name="id" value={enrollmentId} />
-                    <Button
-                      type="submit"
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground hover:text-destructive"
-                    >
-                      <X />
-                      Remove
-                    </Button>
-                  </form>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        </section>
+      )}
+
+      {approvedAthletes.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Approved · {approvedAthletes.length}
+          </h2>
+          <Card>
+            <CardContent>
+              <ul className="space-y-2">
+                {approvedAthletes.map(({ athlete }) => (
+                  <li
+                    key={athlete.id}
+                    className="flex items-center gap-3 rounded-lg border bg-card p-3 text-sm"
+                  >
+                    <span className="font-medium">{athlete.name}</span>
+                    <span className="text-muted-foreground">
+                      {athlete.gender === "MALE" ? "Male" : "Female"} · born{" "}
+                      {athlete.birthYear}
+                    </span>
+                    <Badge variant="default" className="ml-auto">Approved</Badge>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        </section>
+      )}
 
       {open && eligible.length > 0 ? (
         <section className="space-y-3">
@@ -162,24 +200,24 @@ export default async function EventRegisterPage({
                 eventId={event.id}
                 fee={event.entryFeePesos}
                 athletes={eligible}
-                action={enrollAthletes}
+                action={registerAthletes}
               />
             </CardContent>
           </Card>
         </section>
-      ) : open && eligible.length === 0 ? (
+      ) : open && eligible.length === 0 && (order || approvedAthletes.length > 0) ? (
         <Card>
           <CardContent className="text-sm text-muted-foreground">
             All athletes on your roster are registered for this event.
           </CardContent>
         </Card>
-      ) : (
+      ) : !open ? (
         <Card>
           <CardContent className="text-sm text-muted-foreground">
             Registration has closed for this event.
           </CardContent>
         </Card>
-      )}
+      ) : null}
     </div>
   );
 }
