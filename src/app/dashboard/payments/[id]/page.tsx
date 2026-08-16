@@ -30,6 +30,7 @@ export default async function PaymentProofCoachPage({
   if (!payment) notFound();
 
   const event = payment.order.event;
+  if (!event) notFound();
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6">

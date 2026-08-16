@@ -39,7 +39,7 @@ export default async function RegisterChapterPage() {
           🥋
         </Link>
         <span className="text-sm font-semibold tracking-tight">
-          Taekwondo Tournament Manager
+          TKD ARENA
         </span>
         <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" render={<Link href="/dashboard" />}>

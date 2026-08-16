@@ -38,6 +38,9 @@ export default async function EventsCoachPage() {
   const events = await getCachedPublishedEvents();
 
   const upcoming = events.filter((e) => isEventUpcoming(e.eventDate));
+  const past = events
+    .filter((e) => !isEventUpcoming(e.eventDate))
+    .sort((a, b) => b.eventDate.getTime() - a.eventDate.getTime());
 
   const registrationsByEvent = chapter
     ? await db.order.findMany({
@@ -117,6 +120,51 @@ export default async function EventsCoachPage() {
             </li>
           ))}
         </ul>
+      )}
+
+      {past.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Past Events · {past.length}
+          </h2>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {past.map((event) => (
+              <li key={event.id} className="overflow-hidden rounded-lg border bg-card">
+                {event.imageUrl ? (
+                  <div className="relative h-28 w-full">
+                    <Image
+                      src={event.imageUrl}
+                      alt={event.name}
+                      fill
+                      sizes="(min-width: 640px) 50vw, 100vw"
+                      className="object-cover opacity-60"
+                    />
+                  </div>
+                ) : null}
+                <div className="p-4">
+                  <p className="font-medium">{event.name}</p>
+                  <div className="mt-1 space-y-1 text-sm text-muted-foreground">
+                    <p className="flex items-center gap-2">
+                      <CalendarDays className="size-4" />
+                      {formatDate(event.eventDate)}
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <MapPin className="size-4" />
+                      {event.location}
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <Tag className="size-4" />
+                      {formatPesos(event.entryFeePesos)} per athlete
+                    </p>
+                  </div>
+                  <div className="mt-3">
+                    <span className="text-xs text-muted-foreground">Event ended</span>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </div>
   );

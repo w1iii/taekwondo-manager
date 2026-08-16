@@ -32,6 +32,7 @@ export default async function PaymentReceiptPage({
   if (!payment || payment.outcome !== "APPROVED") notFound();
 
   const event = payment.order.event;
+  if (!event) notFound();
   const enrolled = payment.order.items.length;
 
   return (

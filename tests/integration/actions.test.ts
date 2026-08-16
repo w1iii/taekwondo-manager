@@ -6,12 +6,19 @@ import {
   registerAthletes,
   removeAthlete,
 } from "@/app/dashboard/events/actions";
-import { submitPayment } from "@/app/dashboard/payments/actions";
-import { approvePayment } from "@/app/admin/payments/actions";
+import {
+  submitPayment,
+  cancelPayment,
+} from "@/app/dashboard/payments/actions";
+import {
+  approvePayment,
+  rejectPayment,
+} from "@/app/admin/payments/actions";
 import {
   generateBracket,
   generateDivisions,
   recordWinner,
+  resetBracket,
 } from "@/app/admin/brackets/actions";
 import { setEventStatus } from "@/app/admin/events/actions";
 import { EventStatus, ChapterStatus, PaymentOutcome } from "@/generated/prisma/client";
@@ -37,6 +44,10 @@ const organizer: TestCoach = {
   email: "org@test.ph",
   role: "organizer",
 };
+
+function proofFile() {
+  return new File([new Uint8Array(1024)], "proof.png", { type: "image/png" });
+}
 
 describe("registerAthletes", () => {
   beforeEach(async () => {
@@ -191,10 +202,6 @@ describe("submitPayment", () => {
     vi.mocked(requireRole).mockResolvedValue(coach as never);
   });
 
-  function proofFile() {
-    return new File([new Uint8Array(1024)], "proof.png", { type: "image/png" });
-  }
-
   it("creates a pending payment for an order with athletes", async () => {
     const chapter = await seedChapter();
     const [athlete] = await seedAthletes(chapter.id, 2);
@@ -300,6 +307,149 @@ describe("submitPayment", () => {
   });
 });
 
+describe("cancelPayment", () => {
+  beforeEach(async () => {
+    await resetDb();
+    vi.mocked(requireRole).mockResolvedValue(coach as never);
+  });
+
+  it("cancels a pending payment and marks order as rejected", async () => {
+    const chapter = await seedChapter();
+    const [athlete] = await seedAthletes(chapter.id, 1);
+    const event = await seedEvent();
+
+    const form = new FormData();
+    form.set("eventId", event.id);
+    form.append("athleteId", athlete.id);
+    await registerAthletes(form);
+
+    const order = await db.order.findFirst({
+      where: { eventId: event.id, chapterId: chapter.id },
+    });
+
+    const payForm = new FormData();
+    payForm.set("orderId", order!.id);
+    payForm.set("referenceNo", "4412 9912");
+    payForm.set("proof", proofFile());
+    await submitPayment(payForm);
+
+    const payment = await db.paymentAttempt.findFirst({
+      where: { orderId: order!.id },
+    });
+
+    const result = await cancelPayment(payment!.id, "Changed my mind");
+    expect(result).toEqual({ ok: true });
+
+    const updated = await db.paymentAttempt.findUnique({ where: { id: payment!.id } });
+    expect(updated!.outcome).toBe("REJECTED");
+    expect(updated!.rejectionReason).toContain("Changed my mind");
+
+    const updatedOrder = await db.order.findUnique({ where: { id: order!.id } });
+    expect(updatedOrder!.status).toBe("REJECTED");
+  });
+
+  it("rejects cancellation with empty reason", async () => {
+    const chapter = await seedChapter();
+    const [athlete] = await seedAthletes(chapter.id, 1);
+    const event = await seedEvent();
+
+    const form = new FormData();
+    form.set("eventId", event.id);
+    form.append("athleteId", athlete.id);
+    await registerAthletes(form);
+
+    const order = await db.order.findFirst({
+      where: { eventId: event.id, chapterId: chapter.id },
+    });
+
+    const payForm = new FormData();
+    payForm.set("orderId", order!.id);
+    payForm.set("referenceNo", "4412 9912");
+    payForm.set("proof", proofFile());
+    await submitPayment(payForm);
+
+    const payment = await db.paymentAttempt.findFirst({
+      where: { orderId: order!.id },
+    });
+
+    const result = await cancelPayment(payment!.id, "   ");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/reason/i);
+  });
+
+  it("rejects cancelling an already approved payment", async () => {
+    vi.mocked(requireRole).mockResolvedValue(coach as never);
+    const chapter = await seedChapter();
+    const [athlete] = await seedAthletes(chapter.id, 1);
+    const event = await seedEvent();
+
+    const form = new FormData();
+    form.set("eventId", event.id);
+    form.append("athleteId", athlete.id);
+    await registerAthletes(form);
+
+    const order = await db.order.findFirst({
+      where: { eventId: event.id, chapterId: chapter.id },
+    });
+
+    const payForm = new FormData();
+    payForm.set("orderId", order!.id);
+    payForm.set("referenceNo", "4412 9912");
+    payForm.set("proof", proofFile());
+    await submitPayment(payForm);
+
+    const payment = await db.paymentAttempt.findFirst({
+      where: { orderId: order!.id },
+    });
+
+    vi.mocked(requireRole).mockResolvedValue(organizer as never);
+    const approveForm = new FormData();
+    approveForm.set("id", payment!.id);
+    await approvePayment(approveForm);
+
+    vi.mocked(requireRole).mockResolvedValue(coach as never);
+    const result = await cancelPayment(payment!.id, "Too late");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/only cancel pending/i);
+  });
+
+  it("rejects cancelling payment from another chapter", async () => {
+    const chapter = await seedChapter();
+    const other = await seedChapter({ headCoachEmail: "other@test.ph" });
+    const [athlete] = await seedAthletes(chapter.id, 1);
+    const event = await seedEvent();
+
+    const form = new FormData();
+    form.set("eventId", event.id);
+    form.append("athleteId", athlete.id);
+    await registerAthletes(form);
+
+    const order = await db.order.findFirst({
+      where: { eventId: event.id, chapterId: chapter.id },
+    });
+
+    const payForm = new FormData();
+    payForm.set("orderId", order!.id);
+    payForm.set("referenceNo", "4412 9912");
+    payForm.set("proof", proofFile());
+    await submitPayment(payForm);
+
+    const payment = await db.paymentAttempt.findFirst({
+      where: { orderId: order!.id },
+    });
+
+    vi.mocked(requireRole).mockResolvedValue({
+      ...coach,
+      userId: "user-other",
+      email: other.headCoachEmail,
+    } as never);
+
+    const result = await cancelPayment(payment!.id, "Not mine");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/unauthorized/i);
+  });
+});
+
 describe("approvePayment", () => {
   beforeEach(async () => {
     await resetDb();
@@ -348,6 +498,92 @@ describe("approvePayment", () => {
 
     const items = await db.orderItem.findMany({ where: { orderId: order!.id } });
     expect(items.length).toBe(0);
+  });
+});
+
+describe("rejectPayment", () => {
+  beforeEach(async () => {
+    await resetDb();
+    vi.mocked(requireRole).mockResolvedValue(organizer as never);
+  });
+
+  it("rejects payment and notifies coach", async () => {
+    vi.mocked(requireRole).mockResolvedValue(coach as never);
+    const chapter = await seedChapter();
+    const [athlete] = await seedAthletes(chapter.id, 1);
+    const event = await seedEvent();
+
+    const form = new FormData();
+    form.set("eventId", event.id);
+    form.append("athleteId", athlete.id);
+    await registerAthletes(form);
+
+    const order = await db.order.findFirst({
+      where: { eventId: event.id, chapterId: chapter.id },
+    });
+
+    const payForm = new FormData();
+    payForm.set("orderId", order!.id);
+    payForm.set("referenceNo", "4412 9912");
+    payForm.set("proof", proofFile());
+    await submitPayment(payForm);
+
+    vi.mocked(requireRole).mockResolvedValue(organizer as never);
+    const payment = await db.paymentAttempt.findFirst({
+      where: { orderId: order!.id },
+    });
+
+    const rejectForm = new FormData();
+    rejectForm.set("id", payment!.id);
+    rejectForm.set("reason", "Invalid proof");
+    await rejectPayment(rejectForm);
+
+    const updated = await db.paymentAttempt.findUnique({ where: { id: payment!.id } });
+    expect(updated!.outcome).toBe("REJECTED");
+    expect(updated!.rejectionReason).toBe("Invalid proof");
+
+    const updatedOrder = await db.order.findUnique({ where: { id: order!.id } });
+    expect(updatedOrder!.status).toBe("REJECTED");
+
+    const notifs = await db.notification.findMany({
+      where: { targetChapterId: chapter.id, role: "COACH" },
+    });
+    expect(notifs.length).toBeGreaterThan(0);
+  });
+
+  it("rejects payment without reason uses default message", async () => {
+    vi.mocked(requireRole).mockResolvedValue(coach as never);
+    const chapter = await seedChapter();
+    const [athlete] = await seedAthletes(chapter.id, 1);
+    const event = await seedEvent();
+
+    const form = new FormData();
+    form.set("eventId", event.id);
+    form.append("athleteId", athlete.id);
+    await registerAthletes(form);
+
+    const order = await db.order.findFirst({
+      where: { eventId: event.id, chapterId: chapter.id },
+    });
+
+    const payForm = new FormData();
+    payForm.set("orderId", order!.id);
+    payForm.set("referenceNo", "4412 9912");
+    payForm.set("proof", proofFile());
+    await submitPayment(payForm);
+
+    vi.mocked(requireRole).mockResolvedValue(organizer as never);
+    const payment = await db.paymentAttempt.findFirst({
+      where: { orderId: order!.id },
+    });
+
+    const rejectForm = new FormData();
+    rejectForm.set("id", payment!.id);
+    await rejectPayment(rejectForm);
+
+    const updated = await db.paymentAttempt.findUnique({ where: { id: payment!.id } });
+    expect(updated!.outcome).toBe("REJECTED");
+    expect(updated!.rejectionReason).toBeNull();
   });
 });
 
@@ -402,6 +638,42 @@ describe("generateDivisions + generateBracket", () => {
       where: { targetChapterId: chapter.id },
     });
     expect(notifications.length).toBeGreaterThan(0);
+  });
+});
+
+describe("resetBracket", () => {
+  beforeEach(async () => {
+    await resetDb();
+    vi.mocked(requireRole).mockResolvedValue(organizer as never);
+  });
+
+  it("deletes all bracket cells for a division", async () => {
+    await seedWeightClasses();
+    const chapter = await seedChapter();
+    const athletes = await seedAthletes(chapter.id, 4, { gender: "MALE", birthYear: 2011 });
+    const event = await seedEvent();
+    for (const a of athletes) await seedApprovedAthlete(event.id, chapter.id, a.id);
+
+    const divForm = new FormData();
+    divForm.set("eventId", event.id);
+    divForm.set("eventType:KYORUGI", "on");
+    await generateDivisions(divForm);
+
+    const division = await db.division.findFirst({ where: { eventId: event.id } });
+
+    const bracketForm = new FormData();
+    bracketForm.set("divisionId", division!.id);
+    await generateBracket(bracketForm);
+
+    const cellsBefore = await db.bracketCell.findMany({ where: { divisionId: division!.id } });
+    expect(cellsBefore.length).toBeGreaterThan(0);
+
+    const resetForm = new FormData();
+    resetForm.set("divisionId", division!.id);
+    await resetBracket(resetForm);
+
+    const cellsAfter = await db.bracketCell.findMany({ where: { divisionId: division!.id } });
+    expect(cellsAfter.length).toBe(0);
   });
 });
 

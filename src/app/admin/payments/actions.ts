@@ -59,7 +59,7 @@ export async function approvePayment(formData: FormData): Promise<void> {
       "COACH",
       payment.order.chapterId,
       "Payment approved",
-      `${payment.order.event.name} — registration confirmed.`,
+      `${payment.order.event?.name ?? "Event"} — registration confirmed.`,
       "/dashboard/payments",
     );
   } catch (error) {
@@ -113,8 +113,8 @@ export async function rejectPayment(formData: FormData): Promise<void> {
       payment.order.chapterId,
       "Payment needs attention",
       reason
-        ? `${payment.order.event.name} — ${reason}`
-        : `${payment.order.event.name} — please resubmit your payment proof.`,
+        ? `${payment.order.event?.name ?? "Event"} — ${reason}`
+        : `${payment.order.event?.name ?? "Event"} — please resubmit your payment proof.`,
       "/dashboard/payments",
     );
   } catch (error) {

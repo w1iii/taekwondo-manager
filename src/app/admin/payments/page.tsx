@@ -28,19 +28,23 @@ function PaymentCard({
 }: {
   payment: Awaited<ReturnType<typeof loadPayments>>[number];
 }) {
+  const order = payment.order;
+
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-start">
         <div className="min-w-0 flex-1 space-y-1 text-sm">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold">{payment.order.chapter.name}</span>
+            <span className="font-semibold">
+              {order?.chapter?.name ?? "Unknown chapter"}
+            </span>
             <span className="text-muted-foreground">
-              · {payment.order.event.name}
+              · {order?.event?.name ?? "Unknown event"}
             </span>
           </div>
           <p className="text-muted-foreground">
-            {payment.order.items.length} athlete
-            {payment.order.items.length === 1 ? "" : "s"} ·{" "}
+            {order?.items?.length ?? 0} athlete
+            {(order?.items?.length ?? 0) === 1 ? "" : "s"} ·{" "}
             {formatPesos(payment.amountPesos)} · Reference: {payment.referenceNo}
           </p>
           <p className="text-muted-foreground">

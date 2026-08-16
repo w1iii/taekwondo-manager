@@ -55,7 +55,7 @@ export default async function PaymentsPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  const filtered = orders.filter((o) => o.event.status === EventStatus.PUBLISHED);
+  const filtered = orders.filter((o) => o.event && o.event.status === EventStatus.PUBLISHED);
 
   return (
     <div className="space-y-6">

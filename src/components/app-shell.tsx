@@ -46,7 +46,7 @@ export function AppShell({
         </div>
 
         <Link href="/" className="text-sm font-semibold tracking-tight">
-          Taekwondo Tournament Manager
+          TKD ARENA
         </Link>
 
         <div className="ml-auto flex items-center gap-3">

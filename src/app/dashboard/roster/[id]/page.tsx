@@ -83,7 +83,7 @@ export default async function AthleteDetailPage({
           </Card>
         ) : (
           <ul className="space-y-3">
-            {approvedEntries.map(({ id: entryId, event }) => {
+            {approvedEntries.filter((e) => e.event !== null).map(({ id: entryId, event }) => {
               const year = event.eventDate.getFullYear();
               const divisions = event.divisions.filter((d) =>
                 athletesInDivision(

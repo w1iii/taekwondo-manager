@@ -110,6 +110,9 @@ export async function deleteEvent(formData: FormData): Promise<void> {
   revalidateTag("events-published", "max");
   revalidatePath("/admin/events");
   revalidatePath("/admin");
+  revalidatePath("/admin/brackets");
+  revalidatePath("/dashboard/events");
+  revalidatePath("/dashboard/payments");
 }
 
 export async function setEventStatus(formData: FormData): Promise<void> {
