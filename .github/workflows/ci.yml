@@ -17,6 +17,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate
+      - run: npx prisma validate
       - run: npm run lint
       - run: npx next typegen
       - run: npx tsc --noEmit
@@ -69,4 +70,50 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npx prisma migrate deploy
+      # Exit non-zero if schema.prisma drifted from the applied migrations.
+      - run: npx prisma migrate status
       - run: npm test
+
+  # Full-stack e2e. Requires real Clerk dev keys as GitHub secrets
+  # (CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY); the job self-skips
+  # when they are not configured.
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    if: ${{ secrets.CLERK_SECRET_KEY != '' }}
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: taekwondo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d taekwondo_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://test:test@localhost:5432/taekwondo_test
+      E2E_DATABASE_URL: postgresql://test:test@localhost:5432/taekwondo_test
+      CLOUDINARY_URL: ""
+      ALLOW_LOCAL_UPLOADS: "true"
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
+      NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /dashboard
+      NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: /dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

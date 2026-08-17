@@ -1,17 +1,33 @@
+import Link from "next/link";
 import { Users } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Pagination } from "@/components/pagination";
 import { requireRole } from "@/lib/auth";
 import { getChapterForUser } from "@/lib/chapters";
 import { db } from "@/lib/db";
 import { beltLabel, genderLabel } from "@/lib/athletes";
 import { AthleteClubStatus } from "@/generated/prisma/client";
+import {
+  pageCount,
+  pageHref,
+  clampPage,
+  parsePage,
+} from "@/lib/pagination";
 
 export const metadata = { title: "Roster Members" };
 
-export default async function RosterMembersPage() {
+const ROSTER_MEMBERS_PAGE_SIZE = 5;
+
+export default async function RosterMembersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; page?: string }>;
+}) {
   const user = await requireRole("coach");
 
   const chapter = await getChapterForUser(user);
@@ -29,17 +45,32 @@ export default async function RosterMembersPage() {
     );
   }
 
-  const [members, inactiveCount] = await Promise.all([
+  const { q, page: pageParam } = await searchParams;
+  const query = q?.trim() ?? "";
+  const requestedPage = parsePage(pageParam);
+
+  const where = {
+    chapterId: chapter.id,
+    status: AthleteClubStatus.ACTIVE,
+    athlete: query ? { is: { name: { contains: query, mode: "insensitive" as const } } } : undefined,
+  };
+
+  const [members, totalMembers, inactiveCount] = await Promise.all([
     db.athleteClub.findMany({
-      where: { chapterId: chapter.id, status: AthleteClubStatus.ACTIVE },
+      where,
       include: { athlete: true },
       orderBy: { athlete: { name: "asc" } },
+      skip: (requestedPage - 1) * ROSTER_MEMBERS_PAGE_SIZE,
+      take: ROSTER_MEMBERS_PAGE_SIZE,
     }),
+    db.athleteClub.count({ where }),
     db.athleteClub.count({
       where: { chapterId: chapter.id, status: AthleteClubStatus.INACTIVE },
     }),
   ]);
 
+  const totalPages = pageCount(totalMembers, ROSTER_MEMBERS_PAGE_SIZE);
+  const membersPage = clampPage(requestedPage, totalPages);
   const currentYear = new Date().getFullYear();
 
   return (
@@ -47,21 +78,54 @@ export default async function RosterMembersPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Roster Members</h1>
         <p className="text-sm text-muted-foreground">
-          {chapter.name} · {members.length} registered athlete
-          {members.length === 1 ? "" : "s"}
+          {chapter.name} · {totalMembers} registered athlete
+          {totalMembers === 1 ? "" : "s"}
         </p>
       </div>
 
-      {members.length === 0 ? (
+      <form
+        method="get"
+        action="/dashboard/roster-members"
+        className="flex items-center gap-2"
+      >
+        <Input
+          type="search"
+          name="q"
+          defaultValue={query}
+          placeholder="Search roster members by name"
+          className="h-8"
+        />
+        <Button type="submit" size="sm">
+          Search
+        </Button>
+        {query ? (
+          <Button
+            render={<Link href="/dashboard/roster-members" />}
+            variant="outline"
+            size="sm"
+          >
+            Clear
+          </Button>
+        ) : null}
+      </form>
+
+      {totalMembers === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground">
             <Users className="size-8" />
-            No roster members yet. Athletes added on My Roster become members of
-            this club automatically.
+            {query
+              ? `No roster members match “${query}”.`
+              : "No roster members yet. Athletes added on My Roster become members of this club automatically."}
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-2">
+          {query ? (
+            <p className="text-sm text-muted-foreground">
+              {totalMembers} member{totalMembers === 1 ? "" : "s"} matching
+              “{query}”
+            </p>
+          ) : null}
           <ul className="space-y-2">
             {members.map((member) => {
               const athlete = member.athlete;
@@ -111,6 +175,12 @@ export default async function RosterMembersPage() {
           ) : null}
         </div>
       )}
+
+      <Pagination
+        page={membersPage}
+        totalPages={totalPages}
+        buildHref={(page) => pageHref({ q: query || undefined }, "page", page)}
+      />
     </div>
   );
 }

@@ -16,14 +16,36 @@ import {
   recordWinner,
   resetBracket,
 } from "@/app/admin/brackets/actions";
-import { createAthlete } from "@/app/dashboard/roster/actions";
-import { setEventStatus } from "@/app/admin/events/actions";
+import {
+  createAthlete,
+  updateAthlete,
+  deleteAthlete,
+} from "@/app/dashboard/roster/actions";
+import {
+  createEvent,
+  updateEvent,
+  setEventStatus,
+} from "@/app/admin/events/actions";
+import { saveUpload, UploadError } from "@/lib/uploads";
 import {
   EventStatus,
   ChapterStatus,
   PaymentOutcome,
   Gender,
 } from "@/generated/prisma/client";
+
+vi.mock("@/lib/uploads", () => {
+  class UploadError extends Error {}
+  return {
+    UploadError,
+    saveUpload: vi.fn().mockResolvedValue("local://uploads/test.png"),
+    deleteUpload: vi.fn(),
+  };
+});
+
+vi.mock("next/navigation", () => ({
+  redirect: vi.fn(),
+}));
 
 import {
   resetDb,
@@ -858,5 +880,472 @@ describe("createAthlete", () => {
     });
     expect(membership).not.toBeNull();
     expect(membership!.status).toBe("ACTIVE");
+  });
+});
+
+describe("registerAthletes guards", () => {
+  beforeEach(async () => {
+    await resetDb();
+    vi.mocked(requireRole).mockResolvedValue(coach as never);
+  });
+
+  it("rejects when the event id is missing", async () => {
+    const result = await registerAthletes(new FormData());
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/missing event/i);
+  });
+
+  it("rejects when no athlete is selected", async () => {
+    const chapter = await seedChapter();
+    vi.mocked(requireRole).mockResolvedValue({
+      ...coach,
+      chapterId: chapter.id,
+    } as never);
+    const event = await seedEvent();
+    const form = new FormData();
+    form.set("eventId", event.id);
+
+    const result = await registerAthletes(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/pick at least one athlete/i);
+  });
+
+  it("rejects when an athlete has no division picked", async () => {
+    const chapter = await seedChapter();
+    vi.mocked(requireRole).mockResolvedValue({
+      ...coach,
+      chapterId: chapter.id,
+    } as never);
+    const [athlete] = await seedAthletes(chapter.id, 1, { gender: Gender.MALE });
+    const event = await seedEvent();
+    await seedPool(event.id);
+
+    const form = new FormData();
+    form.set("eventId", event.id);
+    form.append("athleteId", athlete.id);
+
+    const result = await registerAthletes(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/pick at least one division per athlete/i);
+  });
+
+  it("materializes a live Division only for picked keys", async () => {
+    const chapter = await seedChapter();
+    vi.mocked(requireRole).mockResolvedValue({
+      ...coach,
+      chapterId: chapter.id,
+    } as never);
+    const [athlete] = await seedAthletes(chapter.id, 1, { gender: Gender.MALE });
+    const event = await seedEvent();
+    const { juniorKey, cadetKey } = await seedPool(event.id);
+
+    const result = await registerAthletes(registerForm(event.id, [athlete.id], juniorKey));
+    expect(result.ok).toBe(true);
+
+    const junior = await db.eventDivision.findFirst({
+      where: { eventId: event.id, divisionKey: juniorKey },
+    });
+
+    const divisions = await db.division.findMany({ where: { eventId: event.id } });
+    expect(divisions).toHaveLength(1);
+    expect(divisions[0].divisionKey).toBe(juniorKey);
+    expect(divisions[0].eventDivisionId).toBe(junior!.id);
+    expect(divisions[0].name).toBe("Kyorugi Male Junior Open");
+
+    expect(
+      await db.division.count({ where: { eventId: event.id, divisionKey: cadetKey } }),
+    ).toBe(0);
+
+    const links = await db.orderItemDivision.findMany({
+      where: { divisionId: divisions[0].id },
+    });
+    expect(links).toHaveLength(1);
+  });
+});
+
+describe("createAthlete validation", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  async function mockCoachWithChapter() {
+    const chapter = await seedChapter();
+    vi.mocked(requireRole).mockResolvedValue({
+      ...coach,
+      chapterId: chapter.id,
+    } as never);
+    return chapter;
+  }
+
+  it("rejects a name that is too short", async () => {
+    await mockCoachWithChapter();
+    const form = new FormData();
+    form.set("name", "A");
+    form.set("gender", "MALE");
+    form.set("birthYear", "2010");
+    form.set("weightKg", "40");
+
+    const result = await createAthlete(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/full name/i);
+  });
+
+  it("rejects an out-of-range birth year", async () => {
+    await mockCoachWithChapter();
+    const form = new FormData();
+    form.set("name", "Dani Reyes");
+    form.set("gender", "FEMALE");
+    form.set("birthYear", "1800");
+    form.set("weightKg", "42");
+
+    const result = await createAthlete(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/birth year/i);
+  });
+
+  it("rejects an out-of-range weight", async () => {
+    await mockCoachWithChapter();
+    const form = new FormData();
+    form.set("name", "Dani Reyes");
+    form.set("gender", "FEMALE");
+    form.set("birthYear", "2010");
+    form.set("weightKg", "999");
+
+    const result = await createAthlete(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/0–200/i);
+  });
+
+  it("rejects an invalid belt rank", async () => {
+    await mockCoachWithChapter();
+    const form = new FormData();
+    form.set("name", "Dani Reyes");
+    form.set("gender", "FEMALE");
+    form.set("birthYear", "2010");
+    form.set("weightKg", "42");
+    form.set("beltType", "RAINBOW");
+
+    const result = await createAthlete(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/valid belt/i);
+  });
+});
+
+describe("updateAthlete", () => {
+  beforeEach(async () => {
+    await resetDb();
+    vi.mocked(requireRole).mockResolvedValue(coach as never);
+  });
+
+  it("updates an athlete on the roster", async () => {
+    const chapter = await seedChapter();
+    vi.mocked(requireRole).mockResolvedValue({
+      ...coach,
+      chapterId: chapter.id,
+    } as never);
+    const [athlete] = await seedAthletes(chapter.id, 1);
+
+    const form = new FormData();
+    form.set("id", athlete.id);
+    form.set("name", "Renamed Fighter");
+    form.set("gender", "MALE");
+    form.set("birthYear", "2011");
+    form.set("weightKg", "50");
+    form.set("beltType", "RED");
+
+    const result = await updateAthlete(form);
+    expect(result.ok).toBe(true);
+
+    const updated = await db.athlete.findUnique({ where: { id: athlete.id } });
+    expect(updated!.name).toBe("Renamed Fighter");
+    expect(updated!.beltType).toBe("RED");
+  });
+
+  it("rejects a missing id", async () => {
+    const chapter = await seedChapter();
+    vi.mocked(requireRole).mockResolvedValue({
+      ...coach,
+      chapterId: chapter.id,
+    } as never);
+
+    const form = new FormData();
+    form.set("name", "Nobody");
+    form.set("gender", "MALE");
+    form.set("birthYear", "2010");
+    form.set("weightKg", "40");
+
+    const result = await updateAthlete(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/missing athlete id/i);
+  });
+
+  it("rejects updating an athlete from another chapter", async () => {
+    const chapter = await seedChapter();
+    const other = await seedChapter({ headCoachEmail: "other@test.ph" });
+    vi.mocked(requireRole).mockResolvedValue({
+      ...coach,
+      chapterId: chapter.id,
+    } as never);
+    const [alien] = await seedAthletes(other.id, 1);
+
+    const form = new FormData();
+    form.set("id", alien.id);
+    form.set("name", "Hacked Name");
+    form.set("gender", "MALE");
+    form.set("birthYear", "2010");
+    form.set("weightKg", "40");
+
+    const result = await updateAthlete(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/not found on your roster/i);
+    const untouched = await db.athlete.findUnique({ where: { id: alien.id } });
+    expect(untouched!.name).toBe("Athlete 1");
+  });
+});
+
+describe("deleteAthlete", () => {
+  beforeEach(async () => {
+    await resetDb();
+    vi.mocked(requireRole).mockResolvedValue(coach as never);
+  });
+
+  it("deletes the athlete, club membership, and event references", async () => {
+    const chapter = await seedChapter();
+    vi.mocked(requireRole).mockResolvedValue({
+      ...coach,
+      chapterId: chapter.id,
+    } as never);
+    const [athlete] = await seedAthletes(chapter.id, 1, { gender: Gender.MALE });
+    const event = await seedEvent();
+    const { juniorKey } = await seedPool(event.id);
+    const junior = await db.eventDivision.findFirst({
+      where: { eventId: event.id, divisionKey: juniorKey },
+    });
+
+    const division = await db.division.create({
+      data: {
+        eventId: event.id,
+        eventDivisionId: junior!.id,
+        name: "Kyorugi Male Junior Open",
+        gender: Gender.MALE,
+        eventType: "KYORUGI",
+        divisionKey: juniorKey,
+        minAge: 15,
+        maxAge: 17,
+        weightClassId: junior!.weightClassId,
+        beltType: null,
+      },
+    });
+    await db.order.create({
+      data: {
+        eventId: event.id,
+        coachId: chapter.id,
+        chapterId: chapter.id,
+        items: {
+          create: [
+            {
+              athleteId: athlete.id,
+              divisions: { create: [{ divisionId: division.id }] },
+            },
+          ],
+        },
+      },
+    });
+    await seedApprovedAthlete(event.id, chapter.id, athlete.id);
+    const approved = await db.approvedAthlete.findFirst({
+      where: { athleteId: athlete.id },
+    });
+    await db.approvedAthleteDivision.create({
+      data: { approvedAthleteId: approved!.id, divisionId: division.id },
+    });
+
+    const form = new FormData();
+    form.set("id", athlete.id);
+    await deleteAthlete(form);
+
+    expect(await db.athlete.findUnique({ where: { id: athlete.id } })).toBeNull();
+    expect(await db.athleteClub.count({ where: { athleteId: athlete.id } })).toBe(0);
+    expect(await db.orderItem.count({ where: { athleteId: athlete.id } })).toBe(0);
+    expect(await db.approvedAthlete.count({ where: { athleteId: athlete.id } })).toBe(0);
+    expect(await db.division.count({ where: { eventId: event.id } })).toBe(1);
+  });
+
+  it("leaves an athlete from another chapter untouched", async () => {
+    const chapter = await seedChapter();
+    const other = await seedChapter({ headCoachEmail: "other@test.ph" });
+    vi.mocked(requireRole).mockResolvedValue({
+      ...coach,
+      chapterId: chapter.id,
+    } as never);
+    const [alien] = await seedAthletes(other.id, 1);
+
+    const form = new FormData();
+    form.set("id", alien.id);
+    await deleteAthlete(form);
+
+    expect(await db.athlete.findUnique({ where: { id: alien.id } })).not.toBeNull();
+    expect(
+      await db.athleteClub.count({ where: { athleteId: alien.id } }),
+    ).toBe(1);
+  });
+});
+
+describe("submitPayment guards", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  async function registerForCoach(chapterId: string, email: string) {
+    vi.mocked(requireRole).mockResolvedValue({
+      userId: "user-coach-reg",
+      email,
+      role: "coach",
+      chapterId,
+    } as never);
+    const [athlete] = await seedAthletes(chapterId, 1, { gender: Gender.MALE });
+    const event = await seedEvent();
+    const { juniorKey } = await seedPool(event.id);
+    const result = await registerAthletes(registerForm(event.id, [athlete.id], juniorKey));
+    expect(result.ok).toBe(true);
+    const order = await db.order.findFirst({
+      where: { eventId: event.id, chapterId },
+    });
+    return { order: order!, event };
+  }
+
+  function payForm(orderId: string) {
+    const form = new FormData();
+    form.set("orderId", orderId);
+    form.set("referenceNo", "4412 9912");
+    form.set("proof", proofFile());
+    return form;
+  }
+
+  it("rejects payment for a draft event", async () => {
+    const chapter = await seedChapter();
+    const { order, event } = await registerForCoach(chapter.id, coach.email);
+    await db.event.update({
+      where: { id: event.id },
+      data: { status: EventStatus.DRAFT },
+    });
+
+    const result = await submitPayment(payForm(order.id));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/not accepting payments/i);
+  });
+
+  it("rejects paying another chapter's order", async () => {
+    const other = await seedChapter({ headCoachEmail: "other@test.ph" });
+    const { order } = await registerForCoach(other.id, "other@test.ph");
+
+    const chapter = await seedChapter();
+    vi.mocked(requireRole).mockResolvedValue({
+      ...coach,
+      chapterId: chapter.id,
+    } as never);
+    const result = await submitPayment(payForm(order.id));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/unauthorized/i);
+  });
+
+  it("returns the upload error when the proof upload fails", async () => {
+    const chapter = await seedChapter();
+    const { order } = await registerForCoach(chapter.id, coach.email);
+
+    vi.mocked(saveUpload).mockImplementationOnce(() => {
+      throw new UploadError("Proof upload failed.");
+    });
+    const result = await submitPayment(payForm(order.id));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/Proof upload failed/i);
+    expect(await db.paymentAttempt.count({ where: { orderId: order.id } })).toBe(0);
+  });
+});
+
+describe("admin event actions", () => {
+  beforeEach(async () => {
+    await resetDb();
+    vi.mocked(requireRole).mockResolvedValue(organizer as never);
+  });
+
+  function validEventForm(divisionKey?: string) {
+    const form = new FormData();
+    form.set("name", "Bacolod Open 2026");
+    form.set("location", "Bacolod City Sports Center");
+    form.set("eventDate", "2026-12-01");
+    form.set("registrationDeadline", "2026-11-01T00:00:00.000Z");
+    form.set("entryFeePesos", "500");
+    if (divisionKey) form.append("divisionKey", divisionKey);
+    return form;
+  }
+
+  it("creates the event and its available divisions pool", async () => {
+    const [maleWc] = await seedWeightClasses();
+    const key = `KYORUGI|MALE|15/17|${maleWc.id}|`;
+
+    await createEvent(validEventForm(key));
+
+    const event = await db.event.findFirst({ where: { name: "Bacolod Open 2026" } });
+    expect(event).not.toBeNull();
+    const pool = await db.eventDivision.findMany({ where: { eventId: event!.id } });
+    expect(pool).toHaveLength(1);
+    expect(pool[0].divisionKey).toBe(key);
+    expect(pool[0].name).toBe("Kyorugi Junior Male Open");
+  });
+
+  it("returns a validation error for a missing name", async () => {
+    const form = validEventForm();
+    form.set("name", "");
+    const result = await createEvent(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/enter an event name/i);
+    expect(await db.event.count({ where: { name: "Bacolod Open 2026" } })).toBe(0);
+  });
+
+  it("returns an upload error when the image upload fails", async () => {
+    const [maleWc] = await seedWeightClasses();
+    const key = `KYORUGI|MALE|15/17|${maleWc.id}|`;
+    const form = validEventForm(key);
+    form.set(
+      "image",
+      new File([new Uint8Array(1024)], "poster.png", { type: "image/png" }),
+    );
+    vi.mocked(saveUpload).mockImplementationOnce(() => {
+      throw new UploadError("Image exceeds 15MB. choose another image.");
+    });
+
+    const result = await createEvent(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/15MB/i);
+    expect(await db.event.count({ where: { name: "Bacolod Open 2026" } })).toBe(0);
+  });
+
+  it("replaces the available divisions pool on update", async () => {
+    const event = await seedEvent();
+    const [maleWc] = await seedWeightClasses();
+    const key = `KYORUGI|MALE|15/17|${maleWc.id}|`;
+
+    const withDivisions = validEventForm(key);
+    withDivisions.set("id", event.id);
+    await updateEvent(withDivisions);
+    const pool = await db.eventDivision.findMany({ where: { eventId: event.id } });
+    expect(pool).toHaveLength(1);
+    expect(pool[0].divisionKey).toBe(key);
+
+    const empty = validEventForm();
+    empty.set("id", event.id);
+    await updateEvent(empty);
+    expect(await db.eventDivision.count({ where: { eventId: event.id } })).toBe(0);
+  });
+
+  it("ignores an invalid status change", async () => {
+    const event = await seedEvent({ status: EventStatus.DRAFT });
+    const form = new FormData();
+    form.set("id", event.id);
+    form.set("status", "BOGUS");
+
+    await setEventStatus(form);
+    const updated = await db.event.findUnique({ where: { id: event.id } });
+    expect(updated!.status).toBe(EventStatus.DRAFT);
   });
 });
