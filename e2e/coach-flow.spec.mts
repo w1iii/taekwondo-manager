@@ -86,10 +86,13 @@ test("coach enrolls the athlete in the event", async ({ page }) => {
   await page.getByRole("button", { name: "Register", exact: true }).click();
   await expect(page).toHaveURL(/\/dashboard\/events\//);
 
-  await page.getByText(ATHLETE_NAME).click();
-  await page.getByRole("button", { name: "Register selected athletes" }).click();
+  const row = page.locator("li").filter({ hasText: ATHLETE_NAME });
+  await row.locator('input[type="checkbox"]').check();
+  await row.locator("select[multiple]").selectOption({ label: "Kyorugi Male Junior Open" });
 
-  await expect(page.getByText("Registered · 1")).toBeVisible();
+  await page.getByRole("button", { name: "Create order" }).click();
+
+  await expect(page.getByText("Pending order · 1")).toBeVisible();
   await expect(page.getByText(ATHLETE_NAME)).toBeVisible();
 
   const enrollment = await db.enrollment(eventId, athleteId);

@@ -48,10 +48,14 @@ export function ChapterCard({
   chapter,
   order,
   approvedAthletes,
+  divisionsByItem,
+  divisionsByAthlete,
 }: {
   chapter: Chapter;
   order: Order;
   approvedAthletes: ApprovedAthleteEntry[];
+  divisionsByItem: Record<string, string[]>;
+  divisionsByAthlete: Record<string, string[]>;
 }) {
   const [open, setOpen] = useState(false);
   const latestPayment = order.payments[0];
@@ -116,12 +120,17 @@ export function ChapterCard({
                   {order.items.map(({ id: itemId, athlete }) => (
                     <li
                       key={itemId}
-                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                      className="px-3 py-2 text-sm"
                     >
-                      <span className="font-medium">{athlete.name}</span>
-                      <span className="text-muted-foreground">
-                        {genderLabel(athlete.gender)} · born {athlete.birthYear}
-                        {athlete.weightKg > 0 ? ` · ${athlete.weightKg} kg` : ""}
+                      <span className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-medium">{athlete.name}</span>
+                        <span className="text-muted-foreground">
+                          {genderLabel(athlete.gender)} · born {athlete.birthYear}
+                          {athlete.weightKg > 0 ? ` · ${athlete.weightKg} kg` : ""}
+                        </span>
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {divisionsByItem[itemId]?.join(", ") ?? "No division"}
                       </span>
                     </li>
                   ))}
@@ -138,10 +147,15 @@ export function ChapterCard({
                   {approvedAthletes.map(({ athlete }) => (
                     <li
                       key={athlete.id}
-                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                      className="px-3 py-2 text-sm"
                     >
-                      <span className="font-medium">{athlete.name}</span>
-                      <Badge variant="default">Approved</Badge>
+                      <span className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-medium">{athlete.name}</span>
+                        <Badge variant="default">Approved</Badge>
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {divisionsByAthlete[athlete.id]?.join(", ") ?? "No division"}
+                      </span>
                     </li>
                   ))}
                 </ul>

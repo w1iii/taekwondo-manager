@@ -16,7 +16,14 @@ export async function approvePayment(formData: FormData): Promise<void> {
 
   const payment = await db.paymentAttempt.findUnique({
     where: { id },
-    include: { order: { include: { event: true, items: { include: { athlete: true } } } } },
+    include: {
+      order: {
+        include: {
+          event: true,
+          items: { include: { athlete: true, divisions: true } },
+        },
+      },
+    },
   });
   if (!payment) return;
 
@@ -33,20 +40,34 @@ export async function approvePayment(formData: FormData): Promise<void> {
       });
 
       const orderItems = payment.order.items;
-      if (orderItems.length > 0) {
-        await tx.approvedAthlete.createMany({
-          data: orderItems.map((item) => ({
+      for (const item of orderItems) {
+        const approved = await tx.approvedAthlete.upsert({
+          where: {
+            eventId_athleteId: {
+              eventId: payment.order.eventId,
+              athleteId: item.athleteId,
+            },
+          },
+          create: {
             eventId: payment.order.eventId,
             chapterId: payment.order.chapterId,
             athleteId: item.athleteId,
             orderId: payment.orderId,
-          })),
-          skipDuplicates: true,
+          },
+          update: {},
         });
 
-        await tx.orderItem.deleteMany({
-          where: { orderId: payment.orderId },
-        });
+        if (item.divisions.length > 0) {
+          await tx.approvedAthleteDivision.createMany({
+            data: item.divisions.map((d) => ({
+              approvedAthleteId: approved.id,
+              divisionId: d.divisionId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        await tx.orderItem.delete({ where: { id: item.id } });
       }
     });
   } catch (error) {

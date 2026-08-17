@@ -10,60 +10,6 @@ import {
   resolveByeWinners,
   participantsOf,
 } from "@/lib/brackets";
-import { buildDivisions, athletesInDivision } from "@/lib/divisions";
-import { getEventEntries } from "@/lib/enrollments";
-import { EventType } from "@/generated/prisma/client";
-const ALL_EVENT_TYPES = [
-  EventType.KYORUGI,
-  EventType.POOMSAE,
-  EventType.FREESTYLE_POOMSAE,
-  EventType.BREAKING,
-];
-
-export async function generateDivisions(formData: FormData): Promise<void> {
-  const user = await requireRole("organizer");
-
-  const eventId = String(formData.get("eventId") ?? "");
-  if (!eventId) return;
-
-  const event = await db.event.findUnique({ where: { id: eventId } });
-  if (!event) return;
-
-  const selected = ALL_EVENT_TYPES.filter((t) => formData.get(`eventType:${t}`) === "on");
-  const eventTypes = selected.length > 0 ? selected : [EventType.KYORUGI, EventType.POOMSAE];
-
-  const [entries, weightClasses] = await Promise.all([
-    getEventEntries(eventId),
-    db.weightClass.findMany({ orderBy: [{ gender: "asc" }, { sortOrder: "asc" }] }),
-  ]);
-
-  const divisions = buildDivisions(
-    event.eventDate.getFullYear(),
-    entries.map((e) => e.athlete),
-    weightClasses,
-    eventTypes,
-  );
-
-  try {
-    await db.$transaction([
-      db.division.deleteMany({ where: { eventId } }),
-      db.division.createMany({ data: divisions.map((d) => ({ ...d, eventId })) }),
-    ]);
-  } catch (error) {
-    reportError("generate-divisions-failed", { eventId, actorId: user.userId }, error);
-    throw error;
-  }
-
-  logInfo("divisions-generated", { eventId, count: divisions.length });
-  revalidateTag("events-published", "max");
-  revalidateTag("brackets-cells", "max");
-  revalidatePath("/admin/brackets");
-  revalidatePath(`/admin/brackets/events/${eventId}`);
-  revalidatePath(`/admin/brackets/events/${eventId}/divisions`);
-  revalidatePath("/dashboard/brackets");
-  revalidatePath(`/dashboard/brackets/${eventId}`);
-  revalidatePath("/admin");
-}
 
 export async function generateBracket(formData: FormData): Promise<void> {
   const user = await requireRole("organizer");
@@ -73,24 +19,18 @@ export async function generateBracket(formData: FormData): Promise<void> {
 
   const division = await db.division.findUnique({
     where: { id: divisionId },
-    include: { event: true, weightClass: true },
+    include: { event: true },
   });
   if (!division) return;
 
-  const entries = await getEventEntries(division.eventId);
-
-  const athletes = athletesInDivision(
-    {
-      gender: division.gender,
-      eventType: division.eventType,
-      minAge: division.minAge,
-      maxAge: division.maxAge,
-      beltType: division.beltType,
-      weightClass: division.weightClass,
+  const members = await db.approvedAthleteDivision.findMany({
+    where: { divisionId },
+    select: {
+      approvedAthlete: { select: { athleteId: true, chapterId: true } },
     },
-    division.event.eventDate.getFullYear(),
-    entries.map((e) => e.athlete),
-  );
+  });
+
+  const athletes = members.map((m) => ({ id: m.approvedAthlete.athleteId }));
 
   const cells = resolveByeWinners(generateBracketCells(athletes));
   if (cells.length > 0) {
@@ -106,7 +46,7 @@ export async function generateBracket(formData: FormData): Promise<void> {
       throw error;
     }
 
-    const chapterIds = [...new Set(entries.map((e) => e.chapterId))];
+    const chapterIds = [...new Set(members.map((m) => m.approvedAthlete.chapterId))];
     await db.notification.createMany({
       data: chapterIds.map((chapterId) => ({
         role: "COACH",

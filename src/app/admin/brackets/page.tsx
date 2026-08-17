@@ -60,8 +60,8 @@ export default async function BracketsAdminPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Brackets</h1>
         <p className="text-sm text-muted-foreground">
-          Manage brackets per event — view players, generate divisions and draw
-          single-elimination brackets for each.
+          Manage brackets per event — view players and draw single-elimination
+          brackets for each division.
         </p>
       </div>
 

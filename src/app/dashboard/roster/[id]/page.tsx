@@ -10,7 +10,6 @@ import { getChapterForUser } from "@/lib/chapters";
 import { db } from "@/lib/db";
 import { formatDate } from "@/lib/events";
 import { genderLabel } from "@/lib/athletes";
-import { athletesInDivision } from "@/lib/divisions";
 
 export const metadata = { title: "Athlete" };
 
@@ -38,6 +37,23 @@ export default async function AthleteDetailPage({
     },
     orderBy: { approvedAt: "desc" },
   });
+
+  const approvedDivisions = await db.approvedAthleteDivision.findMany({
+    where: {
+      approvedAthlete: {
+        is: { athleteId: id, chapterId: chapter.id },
+      },
+    },
+    select: {
+      division: { select: { name: true, eventId: true } },
+    },
+  });
+  const divisionsByEvent = new Map<string, string[]>();
+  for (const d of approvedDivisions) {
+    const list = divisionsByEvent.get(d.division.eventId) ?? [];
+    list.push(d.division.name);
+    divisionsByEvent.set(d.division.eventId, list);
+  }
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6">
@@ -84,21 +100,7 @@ export default async function AthleteDetailPage({
         ) : (
           <ul className="space-y-3">
             {approvedEntries.filter((e) => e.event !== null).map(({ id: entryId, event }) => {
-              const year = event.eventDate.getFullYear();
-              const divisions = event.divisions.filter((d) =>
-                athletesInDivision(
-                  {
-                    gender: d.gender,
-                    eventType: d.eventType,
-                    minAge: d.minAge,
-                    maxAge: d.maxAge,
-                    beltType: d.beltType,
-                    weightClass: d.weightClass,
-                  },
-                  year,
-                  [athlete],
-                ).length > 0,
-              );
+              const divisions = divisionsByEvent.get(event.id) ?? [];
 
               return (
                 <li key={entryId} className="rounded-lg border bg-card p-4">
@@ -115,10 +117,10 @@ export default async function AthleteDetailPage({
                         Division:{" "}
                         {divisions.length > 0 ? (
                           <span className="font-medium">
-                            {divisions.map((d) => d.name).join(", ")}
+                            {divisions.join(", ")}
                           </span>
                         ) : (
-                          <span className="text-muted-foreground">Not generated yet</span>
+                          <span className="text-muted-foreground">None selected</span>
                         )}
                       </p>
                     </div>

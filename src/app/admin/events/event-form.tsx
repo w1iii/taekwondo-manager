@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { compressImageFile } from "@/lib/client-image";
+import type { DivisionOption } from "@/lib/divisions";
 import {
   DEFAULT_ENTRY_FEE_PESOS,
   MAX_EVENT_IMAGE_BYTES,
@@ -34,9 +35,13 @@ export type EventFormValues = {
 export function EventForm({
   action,
   values,
+  candidateDivisions,
+  defaultDivisionKeys = [],
 }: {
   action: (formData: FormData) => Promise<EventFormState>;
   values?: EventFormValues;
+  candidateDivisions?: DivisionOption[];
+  defaultDivisionKeys?: string[];
 }) {
   const [state, formAction, pending] = useActionState(
     (_prev: EventFormState, formData: FormData) => action(formData),
@@ -45,6 +50,30 @@ export function EventForm({
   const [preview, setPreview] = useState<string | null>(values?.imageUrl ?? null);
   const [imageError, setImageError] = useState<string | null>(null);
   const compressedImageRef = useRef<File | null>(null);
+
+  const [selectedDivs, setSelectedDivs] = useState<Set<string>>(
+    () => new Set(defaultDivisionKeys),
+  );
+
+  const toggleDiv = (key: string) => {
+    setSelectedDivs((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const groups =
+    candidateDivisions?.reduce<{ label: string; options: DivisionOption[] }[]>(
+      (acc, option) => {
+        const group = acc.find((g) => g.label === option.eventTypeLabel);
+        if (group) group.options.push(option);
+        else acc.push({ label: option.eventTypeLabel, options: [option] });
+        return acc;
+      },
+      [],
+    ) ?? [];
 
   async function onImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -178,6 +207,85 @@ export function EventForm({
           Defaults to ₱{DEFAULT_ENTRY_FEE_PESOS.toLocaleString("en-PH")}. Applied when
           chapters submit their team payment.
         </p>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <Label>Available divisions</Label>
+            <p className="text-xs text-muted-foreground">
+              Pick which divisions coaches may register athletes into. Only
+              divisions with registered players appear in brackets.
+            </p>
+          </div>
+          <span className="text-xs font-medium">
+            {selectedDivs.size}
+            {candidateDivisions ? ` of ${candidateDivisions.length}` : ""} selected
+          </span>
+        </div>
+
+        {candidateDivisions && candidateDivisions.length === 0 ? (
+          <p className="text-sm text-destructive">
+            No weight classes configured. Add WT weight classes before choosing divisions.
+          </p>
+        ) : null}
+
+        <div className="space-y-4 rounded-lg border bg-card p-3">
+          {groups.map((group) => {
+            const selectedInGroup = group.options.filter((o) =>
+              selectedDivs.has(o.divisionKey),
+            ).length;
+            const allInGroup = selectedInGroup === group.options.length;
+            return (
+              <div key={group.label} className="space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {group.label} · {selectedInGroup}/{group.options.length}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedDivs((current) => {
+                        const next = new Set(current);
+                        for (const o of group.options) {
+                          if (allInGroup) next.delete(o.divisionKey);
+                          else next.add(o.divisionKey);
+                        }
+                        return next;
+                      });
+                    }}
+                    className="rounded-md border px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+                  >
+                    {allInGroup ? "Clear all" : "Select all"}
+                  </button>
+                </div>
+                <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                  {group.options.map((option) => (
+                    <label
+                      key={option.divisionKey}
+                      className="flex cursor-pointer items-center gap-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        name="divisionKey"
+                        value={option.divisionKey}
+                        checked={selectedDivs.has(option.divisionKey)}
+                        onChange={() => toggleDiv(option.divisionKey)}
+                        className="size-4"
+                      />
+                      <span className="truncate">
+                        {option.name}
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          {option.gender === "MALE" ? "M" : "F"}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {state.ok ? null : state.error ? (

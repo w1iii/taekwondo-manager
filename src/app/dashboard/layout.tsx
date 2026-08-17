@@ -8,6 +8,7 @@ import type { NavItem } from "@/components/nav-link";
 const nav: NavItem[] = [
   { href: "/dashboard", label: "Overview", icon: "LayoutDashboard" },
   { href: "/dashboard/roster", label: "My Roster", icon: "Users" },
+  { href: "/dashboard/roster-members", label: "Roster Members", icon: "IdCard" },
   { href: "/dashboard/events", label: "Register for Event", icon: "ListChecks" },
   { href: "/dashboard/payments", label: "Team Payment", icon: "Receipt" },
   { href: "/dashboard/directory", label: "Directory", icon: "Users" },

@@ -10,11 +10,11 @@ import { Pagination } from "@/components/pagination";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatDate } from "@/lib/events";
-import { athletesInDivision, EVENT_TYPE_LABELS } from "@/lib/divisions";
+import { EVENT_TYPE_LABELS } from "@/lib/divisions";
 import { beltLabel, genderLabel } from "@/lib/athletes";
 import { EventStatus } from "@/generated/prisma/client";
 import { ActionButton } from "@/components/action-button";
-import { generateDivisions, generateBracket } from "../../../actions";
+import { generateBracket } from "../../../actions";
 import { pageCount, clampPage, parsePage, toSearchParams } from "@/lib/pagination";
 
 export const metadata = { title: "Event divisions" };
@@ -43,23 +43,24 @@ export default async function DivisionsPage({
   });
   if (!event) notFound();
 
-  const entries = await db.approvedAthlete.findMany({
-    where: {
-      eventId,
-    },
-    include: { athlete: true },
-  });
-
-  const year = event.eventDate.getFullYear();
-  const athletes = entries.map((e) => e.athlete);
   const divisionIds = event.divisions.map((d) => d.id);
-  const cellCounts = await db.bracketCell.groupBy({
-    by: ["divisionId"],
-    where: { divisionId: { in: divisionIds } },
-    _count: { _all: true },
-  });
+  const [cellCounts, memberCounts] = await Promise.all([
+    db.bracketCell.groupBy({
+      by: ["divisionId"],
+      where: { divisionId: { in: divisionIds } },
+      _count: { _all: true },
+    }),
+    db.approvedAthleteDivision.groupBy({
+      by: ["divisionId"],
+      where: { divisionId: { in: divisionIds } },
+      _count: { _all: true },
+    }),
+  ]);
   const cellCountByDivision = new Map(
     cellCounts.map((c) => [c.divisionId, c._count._all]),
+  );
+  const memberCountByDivision = new Map(
+    memberCounts.map((c) => [c.divisionId, c._count._all]),
   );
 
   let filtered = event.divisions;
@@ -113,33 +114,12 @@ export default async function DivisionsPage({
         </Button>
       </div>
 
-      <form
-        action={generateDivisions}
-        className="flex flex-wrap items-end gap-4 rounded-lg border bg-card p-3"
-      >
-        <div className="space-y-1.5">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Event types
-          </p>
-          <div className="flex flex-wrap gap-3">
-            {(Object.keys(EVENT_TYPE_LABELS) as (keyof typeof EVENT_TYPE_LABELS)[]).map((t) => (
-              <label key={t} className="flex items-center gap-1.5 text-sm">
-                <input
-                  type="checkbox"
-                  name={`eventType:${t}`}
-                  defaultChecked={t === "KYORUGI" || t === "POOMSAE"}
-                />
-                {EVENT_TYPE_LABELS[t]}
-              </label>
-            ))}
-          </div>
-        </div>
-        <input type="hidden" name="eventId" value={event.id} />
-        <ActionButton
-          label={event.divisions.length > 0 ? "Regenerate divisions" : "Generate divisions"}
-          variant="outline"
-        />
-      </form>
+      <Card>
+        <CardContent className="text-sm text-muted-foreground">
+          Divisions appear here automatically once players register into them.
+          Draw a bracket for each division that has players.
+        </CardContent>
+      </Card>
 
       <form method="get" className="flex flex-wrap items-end gap-3">
         <div className="flex-1 min-w-[200px]">
@@ -209,24 +189,13 @@ export default async function DivisionsPage({
               <Users className="size-8" />
               {query || type || gender
                 ? "No divisions match your filters."
-                : "No divisions yet — generate them from the form above."}
+                : "No divisions yet — they appear here once players register."}
             </CardContent>
           </Card>
         ) : (
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {paginated.map((division) => {
-              const count = athletesInDivision(
-                {
-                  gender: division.gender,
-                  eventType: division.eventType,
-                  minAge: division.minAge,
-                  maxAge: division.maxAge,
-                  beltType: division.beltType,
-                  weightClass: division.weightClass,
-                },
-                year,
-                athletes,
-              ).length;
+              const count = memberCountByDivision.get(division.id) ?? 0;
               const hasBracket = (cellCountByDivision.get(division.id) ?? 0) > 0;
               return (
                 <li key={division.id} className="rounded-lg border bg-card p-4">
@@ -245,10 +214,12 @@ export default async function DivisionsPage({
                     {division.beltType ? beltLabel(division.beltType) : "No belt"}
                   </p>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {hasBracket ? (
+                    {count === 0 ? (
+                      <Badge variant="secondary">No players</Badge>
+                    ) : hasBracket ? (
                       <Badge variant="secondary">Bracket ready</Badge>
                     ) : null}
-                    {!hasBracket ? (
+                    {count > 0 && !hasBracket ? (
                       <form action={generateBracket}>
                         <input type="hidden" name="divisionId" value={division.id} />
                         <ActionButton label="Generate bracket" size="sm" />
@@ -257,6 +228,7 @@ export default async function DivisionsPage({
                     <Button
                       render={<Link href={`/admin/brackets/${division.id}`} />}
                       size="sm"
+                      disabled={!hasBracket}
                     >
                       View bracket
                     </Button>

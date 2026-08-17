@@ -5,6 +5,7 @@ import {
   ageWithinGroup,
   weightWithinClass,
   buildDivisions,
+  enumerateDivisions,
   athletesInDivision,
   AGE_GROUPS,
   BeltType,
@@ -136,5 +137,60 @@ describe("AGE_GROUPS", () => {
     const maxAges = AGE_GROUPS.filter((g) => g.maxAge !== null).map((g) => g.maxAge!);
     expect(Math.min(...minAges)).toBe(4);
     expect(Math.max(...maxAges)).toBe(49);
+  });
+});
+
+describe("enumerateDivisions", () => {
+  const weightClasses = [
+    { id: "w1", gender: Gender.MALE, name: "Under 45kg", minKg: 1, maxKg: 45, sortOrder: 1 },
+    { id: "w2", gender: Gender.FEMALE, name: "Under 43kg", minKg: 1, maxKg: 43, sortOrder: 1 },
+  ];
+
+  it("enumerates every kyorugi weight class regardless of athletes", () => {
+    const divisions = enumerateDivisions(weightClasses, [EventType.KYORUGI]);
+    expect(divisions.length).toBeGreaterThan(0);
+    expect(
+      divisions.some((d) => d.eventType === EventType.KYORUGI && d.weightClassId === "w1"),
+    ).toBe(true);
+    expect(
+      divisions.some((d) => d.eventType === EventType.KYORUGI && d.weightClassId === "w2"),
+    ).toBe(true);
+    // Only kyorugi-eligible age groups.
+    const kyorugiGroups = AGE_GROUPS.filter((g) => g.kyorugi);
+    expect(divisions.length).toBe(kyorugiGroups.length * 2);
+  });
+
+  it("enumerates every belt option for poomsae", () => {
+    const divisions = enumerateDivisions(weightClasses, [EventType.POOMSAE]);
+    const maleDivs = divisions.filter(
+      (d) => d.eventType === EventType.POOMSAE && d.gender === Gender.MALE,
+    );
+    const beltCounts = new Set(maleDivs.map((d) => d.beltType));
+    // null (no belt) + 6 belt colors per age group.
+    expect(beltCounts.size).toBe(7);
+    expect(maleDivs.length).toBe(AGE_GROUPS.length * 7);
+  });
+
+  it("enumerates one freestyle/breaking division per age group per gender", () => {
+    const divisions = enumerateDivisions(weightClasses, [EventType.BREAKING]);
+    expect(divisions.length).toBe(AGE_GROUPS.length * 2);
+    expect(divisions.every((d) => d.weightClassId === null)).toBe(true);
+  });
+
+  it("emits unique keys across event types", () => {
+    const divisions = enumerateDivisions(weightClasses, [
+      EventType.KYORUGI,
+      EventType.POOMSAE,
+      EventType.FREESTYLE_POOMSAE,
+      EventType.BREAKING,
+    ]);
+    const keys = divisions.map((d) => d.divisionKey);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("omits kyorugi divisions when no weight classes exist", () => {
+    const divisions = enumerateDivisions([], [EventType.KYORUGI, EventType.POOMSAE]);
+    expect(divisions.some((d) => d.eventType === EventType.KYORUGI)).toBe(false);
+    expect(divisions.some((d) => d.eventType === EventType.POOMSAE)).toBe(true);
   });
 });

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { candidateDivisionsForEvent } from "@/lib/divisions";
 import { updateEvent } from "../../actions";
 import { EventForm } from "../../event-form";
 
@@ -17,8 +18,15 @@ export default async function EditEventPage({
   await requireRole("organizer");
 
   const { id } = await params;
-  const event = await db.event.findUnique({ where: { id } });
+  const event = await db.event.findUnique({
+    where: { id },
+    include: { eventDivisions: true },
+  });
   if (!event) notFound();
+
+  const weightClasses = await db.weightClass.findMany({
+    orderBy: [{ gender: "asc" }, { sortOrder: "asc" }],
+  });
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-6">
@@ -35,6 +43,8 @@ export default async function EditEventPage({
 
       <EventForm
         action={updateEvent}
+        candidateDivisions={candidateDivisionsForEvent(weightClasses)}
+        defaultDivisionKeys={event.eventDivisions.map((d) => d.divisionKey)}
         values={{
           id: event.id,
           name: event.name,

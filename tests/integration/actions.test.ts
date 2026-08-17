@@ -2,10 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
-import {
-  registerAthletes,
-  removeAthlete,
-} from "@/app/dashboard/events/actions";
+import { registerAthletes } from "@/app/dashboard/events/actions";
 import {
   submitPayment,
   cancelPayment,
@@ -16,12 +13,17 @@ import {
 } from "@/app/admin/payments/actions";
 import {
   generateBracket,
-  generateDivisions,
   recordWinner,
   resetBracket,
 } from "@/app/admin/brackets/actions";
+import { createAthlete } from "@/app/dashboard/roster/actions";
 import { setEventStatus } from "@/app/admin/events/actions";
-import { EventStatus, ChapterStatus, PaymentOutcome } from "@/generated/prisma/client";
+import {
+  EventStatus,
+  ChapterStatus,
+  PaymentOutcome,
+  Gender,
+} from "@/generated/prisma/client";
 
 import {
   resetDb,
@@ -29,6 +31,7 @@ import {
   seedChapter,
   seedApprovedAthlete,
   seedEvent,
+  seedEventDivisions,
   seedWeightClasses,
   type TestCoach,
 } from "./helpers";
@@ -49,31 +52,140 @@ function proofFile() {
   return new File([new Uint8Array(1024)], "proof.png", { type: "image/png" });
 }
 
+/** Seeds weight classes + a male kyorugi pool on an event; returns the junior key. */
+async function seedPool(eventId: string) {
+  const [maleWc] = await seedWeightClasses();
+  const pool = await seedEventDivisions(eventId, maleWc.id);
+  return pool;
+}
+
+/** Builds a registerAthletes form with division picks per athlete. */
+function registerForm(
+  eventId: string,
+  athleteIds: string[],
+  divisionKey: string,
+) {
+  const form = new FormData();
+  form.set("eventId", eventId);
+  for (const id of athleteIds) {
+    form.append("athleteId", id);
+    form.append(`divisionKey:${id}`, divisionKey);
+  }
+  return form;
+}
+
+/** Creates a live Division and links approved athletes to it. */
+async function seedEnrolledDivision(eventId: string, athleteIds: string[]) {
+  const [maleWc] = await seedWeightClasses();
+  const pool = await seedEventDivisions(eventId, maleWc.id);
+  const junior = pool.rows[1];
+  const division = await db.division.create({
+    data: {
+      eventId,
+      name: junior.name,
+      gender: junior.gender,
+      eventType: junior.eventType,
+      divisionKey: junior.divisionKey,
+      minAge: junior.minAge,
+      maxAge: junior.maxAge,
+      weightClassId: junior.weightClassId,
+      beltType: junior.beltType,
+    },
+  });
+  const approved = await db.approvedAthlete.findMany({
+    where: { eventId, athleteId: { in: athleteIds } },
+  });
+  if (approved.length > 0) {
+    await db.approvedAthleteDivision.createMany({
+      data: approved.map((a) => ({
+        approvedAthleteId: a.id,
+        divisionId: division.id,
+      })),
+    });
+  }
+  return division;
+}
+
 describe("registerAthletes", () => {
   beforeEach(async () => {
     await resetDb();
     vi.mocked(requireRole).mockResolvedValue(coach as never);
   });
 
-  it("creates an order with athletes for a published event", async () => {
+  it("creates an order with athletes and picks their divisions", async () => {
     const chapter = await seedChapter();
-    const athletes = await seedAthletes(chapter.id, 2);
+    const athletes = await seedAthletes(chapter.id, 2, { gender: Gender.MALE });
     const event = await seedEvent();
+    const { juniorKey } = await seedPool(event.id);
 
-    const form = new FormData();
-    form.set("eventId", event.id);
-    for (const a of athletes) form.append("athleteId", a.id);
+    const form = registerForm(
+      event.id,
+      athletes.map((a) => a.id),
+      juniorKey,
+    );
 
     const result = await registerAthletes(form);
     expect(result).toEqual({ ok: true });
 
     const order = await db.order.findFirst({
       where: { eventId: event.id, chapterId: chapter.id },
-      include: { items: true },
+      include: { items: { include: { divisions: true } } },
     });
     expect(order).not.toBeNull();
     expect(order!.items.length).toBe(2);
     expect(order!.status).toBe("PENDING");
+    expect(order!.items.every((i) => i.divisions.length === 1)).toBe(true);
+
+    // Live Division materialized from the pool on first registration.
+    const live = await db.division.findFirst({
+      where: { eventId: event.id, divisionKey: juniorKey },
+    });
+    expect(live).not.toBeNull();
+  });
+
+  it("rejects a division key outside the event pool", async () => {
+    const chapter = await seedChapter();
+    const [athlete] = await seedAthletes(chapter.id, 1, { gender: Gender.MALE });
+    const event = await seedEvent();
+    const { juniorKey } = await seedPool(event.id);
+    expect(juniorKey).toBeTruthy();
+
+    const form = new FormData();
+    form.set("eventId", event.id);
+    form.append("athleteId", athlete.id);
+    form.append(`divisionKey:${athlete.id}`, "POOMSAE|MALE|15/17||WHITE");
+
+    const result = await registerAthletes(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/no longer available/i);
+  });
+
+  it("rejects a division the athlete is not eligible for", async () => {
+    const chapter = await seedChapter();
+    const [athlete] = await seedAthletes(chapter.id, 1, { gender: Gender.MALE });
+    const event = await seedEvent();
+    const { cadetKey } = await seedPool(event.id);
+
+    const form = new FormData();
+    form.set("eventId", event.id);
+    form.append("athleteId", athlete.id);
+    form.append(`divisionKey:${athlete.id}`, cadetKey);
+
+    const result = await registerAthletes(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/not eligible/i);
+  });
+
+  it("rejects an event with no available divisions", async () => {
+    const chapter = await seedChapter();
+    const [athlete] = await seedAthletes(chapter.id, 1, { gender: Gender.MALE });
+    const event = await seedEvent();
+
+    const form = registerForm(event.id, [athlete.id], "anything");
+
+    const result = await registerAthletes(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/no available divisions/i);
   });
 
   it("rejects athletes that are not on the chapter roster", async () => {
@@ -84,11 +196,9 @@ describe("registerAthletes", () => {
       (await seedAthletes(other.id, 1))[0],
     ];
     const event = await seedEvent();
+    const { juniorKey } = await seedPool(event.id);
 
-    const form = new FormData();
-    form.set("eventId", event.id);
-    form.append("athleteId", own.id);
-    form.append("athleteId", alien.id);
+    const form = registerForm(event.id, [own.id, alien.id], juniorKey);
 
     const result = await registerAthletes(form);
     expect(result.ok).toBe(false);
@@ -139,60 +249,21 @@ describe("registerAthletes", () => {
 
   it("rejects if there is already a pending order", async () => {
     const chapter = await seedChapter();
-    const athletes = await seedAthletes(chapter.id, 1);
+    const [athlete] = await seedAthletes(chapter.id, 1, { gender: Gender.MALE });
     const event = await seedEvent();
+    const { juniorKey } = await seedPool(event.id);
 
-    const form1 = new FormData();
-    form1.set("eventId", event.id);
-    form1.append("athleteId", athletes[0].id);
+    const form1 = registerForm(event.id, [athlete.id], juniorKey);
     await registerAthletes(form1);
 
-    const athletes2 = await seedAthletes(chapter.id, 1, { birthYear: 2020 });
-    const form2 = new FormData();
-    form2.set("eventId", event.id);
-    form2.append("athleteId", athletes2[0].id);
+    const athletes2 = await seedAthletes(chapter.id, 1, {
+      gender: Gender.MALE,
+      birthYear: 2005,
+    });
+    const form2 = registerForm(event.id, [athletes2[0].id], juniorKey);
     const result = await registerAthletes(form2);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/already have an active order/i);
-  });
-});
-
-describe("removeAthlete", () => {
-  beforeEach(async () => {
-    await resetDb();
-    vi.mocked(requireRole).mockResolvedValue(coach as never);
-  });
-
-  it("removes an item from a pending order", async () => {
-    const chapter = await seedChapter();
-    const [athlete] = await seedAthletes(chapter.id, 1);
-    const event = await seedEvent();
-
-    await registerAthletes(
-      Object.assign(new FormData(), {
-        get: () => null,
-        getAll: () => [],
-      } as unknown as FormData),
-    );
-
-    const form = new FormData();
-    form.set("eventId", event.id);
-    form.append("athleteId", athlete.id);
-    await registerAthletes(form);
-
-    const order = await db.order.findFirst({
-      where: { eventId: event.id, chapterId: chapter.id },
-    });
-    const item = await db.orderItem.findFirst({
-      where: { orderId: order!.id },
-    });
-
-    const removeForm = new FormData();
-    removeForm.set("itemId", item!.id);
-    await removeAthlete(removeForm);
-
-    const deleted = await db.orderItem.findUnique({ where: { id: item!.id } });
-    expect(deleted).toBeNull();
   });
 });
 
@@ -204,12 +275,11 @@ describe("submitPayment", () => {
 
   it("creates a pending payment for an order with athletes", async () => {
     const chapter = await seedChapter();
-    const [athlete] = await seedAthletes(chapter.id, 2);
+    const [athlete] = await seedAthletes(chapter.id, 2, { gender: Gender.MALE });
     const event = await seedEvent();
+    const { juniorKey } = await seedPool(event.id);
 
-    const form = new FormData();
-    form.set("eventId", event.id);
-    form.append("athleteId", athlete.id);
+    const form = registerForm(event.id, [athlete.id], juniorKey);
     await registerAthletes(form);
 
     const order = await db.order.findFirst({
@@ -234,12 +304,11 @@ describe("submitPayment", () => {
 
   it("blocks a second submission while the first is pending", async () => {
     const chapter = await seedChapter();
-    const [athlete] = await seedAthletes(chapter.id, 1);
+    const [athlete] = await seedAthletes(chapter.id, 1, { gender: Gender.MALE });
     const event = await seedEvent();
+    const { juniorKey } = await seedPool(event.id);
 
-    const form = new FormData();
-    form.set("eventId", event.id);
-    form.append("athleteId", athlete.id);
+    const form = registerForm(event.id, [athlete.id], juniorKey);
     await registerAthletes(form);
 
     const order = await db.order.findFirst({
@@ -285,12 +354,11 @@ describe("submitPayment", () => {
 
   it("rejects a non-image proof", async () => {
     const chapter = await seedChapter();
-    const [athlete] = await seedAthletes(chapter.id, 1);
+    const [athlete] = await seedAthletes(chapter.id, 1, { gender: Gender.MALE });
     const event = await seedEvent();
+    const { juniorKey } = await seedPool(event.id);
 
-    const form = new FormData();
-    form.set("eventId", event.id);
-    form.append("athleteId", athlete.id);
+    const form = registerForm(event.id, [athlete.id], juniorKey);
     await registerAthletes(form);
 
     const order = await db.order.findFirst({
@@ -315,12 +383,11 @@ describe("cancelPayment", () => {
 
   it("cancels a pending payment and marks order as rejected", async () => {
     const chapter = await seedChapter();
-    const [athlete] = await seedAthletes(chapter.id, 1);
+    const [athlete] = await seedAthletes(chapter.id, 1, { gender: Gender.MALE });
     const event = await seedEvent();
+    const { juniorKey } = await seedPool(event.id);
 
-    const form = new FormData();
-    form.set("eventId", event.id);
-    form.append("athleteId", athlete.id);
+    const form = registerForm(event.id, [athlete.id], juniorKey);
     await registerAthletes(form);
 
     const order = await db.order.findFirst({
@@ -350,12 +417,11 @@ describe("cancelPayment", () => {
 
   it("rejects cancellation with empty reason", async () => {
     const chapter = await seedChapter();
-    const [athlete] = await seedAthletes(chapter.id, 1);
+    const [athlete] = await seedAthletes(chapter.id, 1, { gender: Gender.MALE });
     const event = await seedEvent();
+    const { juniorKey } = await seedPool(event.id);
 
-    const form = new FormData();
-    form.set("eventId", event.id);
-    form.append("athleteId", athlete.id);
+    const form = registerForm(event.id, [athlete.id], juniorKey);
     await registerAthletes(form);
 
     const order = await db.order.findFirst({
@@ -380,12 +446,11 @@ describe("cancelPayment", () => {
   it("rejects cancelling an already approved payment", async () => {
     vi.mocked(requireRole).mockResolvedValue(coach as never);
     const chapter = await seedChapter();
-    const [athlete] = await seedAthletes(chapter.id, 1);
+    const [athlete] = await seedAthletes(chapter.id, 1, { gender: Gender.MALE });
     const event = await seedEvent();
+    const { juniorKey } = await seedPool(event.id);
 
-    const form = new FormData();
-    form.set("eventId", event.id);
-    form.append("athleteId", athlete.id);
+    const form = registerForm(event.id, [athlete.id], juniorKey);
     await registerAthletes(form);
 
     const order = await db.order.findFirst({
@@ -416,12 +481,11 @@ describe("cancelPayment", () => {
   it("rejects cancelling payment from another chapter", async () => {
     const chapter = await seedChapter();
     const other = await seedChapter({ headCoachEmail: "other@test.ph" });
-    const [athlete] = await seedAthletes(chapter.id, 1);
+    const [athlete] = await seedAthletes(chapter.id, 1, { gender: Gender.MALE });
     const event = await seedEvent();
+    const { juniorKey } = await seedPool(event.id);
 
-    const form = new FormData();
-    form.set("eventId", event.id);
-    form.append("athleteId", athlete.id);
+    const form = registerForm(event.id, [athlete.id], juniorKey);
     await registerAthletes(form);
 
     const order = await db.order.findFirst({
@@ -459,12 +523,11 @@ describe("approvePayment", () => {
   it("approves payment and moves athletes to ApprovedAthlete", async () => {
     vi.mocked(requireRole).mockResolvedValue(coach as never);
     const chapter = await seedChapter();
-    const [athlete] = await seedAthletes(chapter.id, 2);
+    const [athlete] = await seedAthletes(chapter.id, 2, { gender: Gender.MALE });
     const event = await seedEvent();
+    const { juniorKey } = await seedPool(event.id);
 
-    const form = new FormData();
-    form.set("eventId", event.id);
-    form.append("athleteId", athlete.id);
+    const form = registerForm(event.id, [athlete.id], juniorKey);
     await registerAthletes(form);
 
     const order = await db.order.findFirst({
@@ -493,6 +556,14 @@ describe("approvePayment", () => {
     });
     expect(approved.length).toBe(1);
 
+    // Division pick carried into the bracket phase.
+    const approvedDivisions = await db.approvedAthleteDivision.findMany({
+      where: { approvedAthleteId: approved[0].id },
+      include: { division: true },
+    });
+    expect(approvedDivisions.length).toBe(1);
+    expect(approvedDivisions[0].division.divisionKey).toBe(juniorKey);
+
     const updatedOrder = await db.order.findUnique({ where: { id: order!.id } });
     expect(updatedOrder!.status).toBe("APPROVED");
 
@@ -510,12 +581,11 @@ describe("rejectPayment", () => {
   it("rejects payment and notifies coach", async () => {
     vi.mocked(requireRole).mockResolvedValue(coach as never);
     const chapter = await seedChapter();
-    const [athlete] = await seedAthletes(chapter.id, 1);
+    const [athlete] = await seedAthletes(chapter.id, 1, { gender: Gender.MALE });
     const event = await seedEvent();
+    const { juniorKey } = await seedPool(event.id);
 
-    const form = new FormData();
-    form.set("eventId", event.id);
-    form.append("athleteId", athlete.id);
+    const form = registerForm(event.id, [athlete.id], juniorKey);
     await registerAthletes(form);
 
     const order = await db.order.findFirst({
@@ -554,12 +624,11 @@ describe("rejectPayment", () => {
   it("rejects payment without reason uses default message", async () => {
     vi.mocked(requireRole).mockResolvedValue(coach as never);
     const chapter = await seedChapter();
-    const [athlete] = await seedAthletes(chapter.id, 1);
+    const [athlete] = await seedAthletes(chapter.id, 1, { gender: Gender.MALE });
     const event = await seedEvent();
+    const { juniorKey } = await seedPool(event.id);
 
-    const form = new FormData();
-    form.set("eventId", event.id);
-    form.append("athleteId", athlete.id);
+    const form = registerForm(event.id, [athlete.id], juniorKey);
     await registerAthletes(form);
 
     const order = await db.order.findFirst({
@@ -587,57 +656,68 @@ describe("rejectPayment", () => {
   });
 });
 
-describe("generateDivisions + generateBracket", () => {
+describe("generateBracket", () => {
   beforeEach(async () => {
     await resetDb();
     vi.mocked(requireRole).mockResolvedValue(organizer as never);
   });
 
-  it("generates divisions for a published event with approved athletes", async () => {
-    await seedWeightClasses();
+  it("generates bracket cells from enrolled players and notifies chapters", async () => {
     const chapter = await seedChapter();
     const athletes = await seedAthletes(chapter.id, 6, { gender: "MALE", birthYear: 2011 });
     const event = await seedEvent();
+    const athleteIds = athletes.map((a) => a.id);
     for (const a of athletes) await seedApprovedAthlete(event.id, chapter.id, a.id);
 
-    const form = new FormData();
-    form.set("eventId", event.id);
-    form.set("eventType:KYORUGI", "on");
-    await generateDivisions(form);
-
-    const divisions = await db.division.findMany({ where: { eventId: event.id } });
-    expect(divisions.length).toBeGreaterThan(0);
-  });
-
-  it("generates bracket cells for a division and notifies chapters", async () => {
-    await seedWeightClasses();
-    const chapter = await seedChapter();
-    const athletes = await seedAthletes(chapter.id, 6, { gender: "MALE", birthYear: 2011 });
-    const event = await seedEvent();
-    for (const a of athletes) await seedApprovedAthlete(event.id, chapter.id, a.id);
-
-    const divForm = new FormData();
-    divForm.set("eventId", event.id);
-    divForm.set("eventType:KYORUGI", "on");
-    await generateDivisions(divForm);
-
-    const division = await db.division.findFirst({
-      where: { eventId: event.id },
-      include: { weightClass: true },
-    });
-    expect(division).not.toBeNull();
+    const division = await seedEnrolledDivision(event.id, athleteIds);
 
     const bracketForm = new FormData();
-    bracketForm.set("divisionId", division!.id);
+    bracketForm.set("divisionId", division.id);
     await generateBracket(bracketForm);
 
-    const cells = await db.bracketCell.findMany({ where: { divisionId: division!.id } });
+    const cells = await db.bracketCell.findMany({ where: { divisionId: division.id } });
     expect(cells.length).toBeGreaterThan(0);
 
     const notifications = await db.notification.findMany({
-      where: { targetChapterId: chapter.id },
+      where: { targetChapterId: chapter.id, role: "COACH" },
     });
     expect(notifications.length).toBeGreaterThan(0);
+  });
+
+  it("does not create cells for a division with no enrolled players", async () => {
+    const chapter = await seedChapter();
+    const athletes = await seedAthletes(chapter.id, 6, { gender: "MALE", birthYear: 2011 });
+    const event = await seedEvent();
+    for (const a of athletes) await seedApprovedAthlete(event.id, chapter.id, a.id);
+
+    const [maleWc] = await seedWeightClasses();
+    const pool = await seedEventDivisions(event.id, maleWc.id);
+    const junior = pool.rows[1];
+    const division = await db.division.create({
+      data: {
+        eventId: event.id,
+        name: junior.name,
+        gender: junior.gender,
+        eventType: junior.eventType,
+        divisionKey: junior.divisionKey,
+        minAge: junior.minAge,
+        maxAge: junior.maxAge,
+        weightClassId: junior.weightClassId,
+        beltType: junior.beltType,
+      },
+    });
+
+    const bracketForm = new FormData();
+    bracketForm.set("divisionId", division.id);
+    await generateBracket(bracketForm);
+
+    const cells = await db.bracketCell.findMany({ where: { divisionId: division.id } });
+    expect(cells.length).toBe(0);
+
+    const notifications = await db.notification.findMany({
+      where: { targetChapterId: chapter.id, role: "COACH" },
+    });
+    expect(notifications.length).toBe(0);
   });
 });
 
@@ -648,31 +728,26 @@ describe("resetBracket", () => {
   });
 
   it("deletes all bracket cells for a division", async () => {
-    await seedWeightClasses();
     const chapter = await seedChapter();
     const athletes = await seedAthletes(chapter.id, 4, { gender: "MALE", birthYear: 2011 });
     const event = await seedEvent();
+    const athleteIds = athletes.map((a) => a.id);
     for (const a of athletes) await seedApprovedAthlete(event.id, chapter.id, a.id);
 
-    const divForm = new FormData();
-    divForm.set("eventId", event.id);
-    divForm.set("eventType:KYORUGI", "on");
-    await generateDivisions(divForm);
-
-    const division = await db.division.findFirst({ where: { eventId: event.id } });
+    const division = await seedEnrolledDivision(event.id, athleteIds);
 
     const bracketForm = new FormData();
-    bracketForm.set("divisionId", division!.id);
+    bracketForm.set("divisionId", division.id);
     await generateBracket(bracketForm);
 
-    const cellsBefore = await db.bracketCell.findMany({ where: { divisionId: division!.id } });
+    const cellsBefore = await db.bracketCell.findMany({ where: { divisionId: division.id } });
     expect(cellsBefore.length).toBeGreaterThan(0);
 
     const resetForm = new FormData();
-    resetForm.set("divisionId", division!.id);
+    resetForm.set("divisionId", division.id);
     await resetBracket(resetForm);
 
-    const cellsAfter = await db.bracketCell.findMany({ where: { divisionId: division!.id } });
+    const cellsAfter = await db.bracketCell.findMany({ where: { divisionId: division.id } });
     expect(cellsAfter.length).toBe(0);
   });
 });
@@ -715,25 +790,19 @@ describe("recordWinner", () => {
   });
 
   it("records a winner and cascades a clear downstream", async () => {
-    await seedWeightClasses();
     const chapter = await seedChapter();
     const athletes = await seedAthletes(chapter.id, 6, { gender: "MALE", birthYear: 2011 });
     const event = await seedEvent();
+    const athleteIds = athletes.map((a) => a.id);
     for (const a of athletes) await seedApprovedAthlete(event.id, chapter.id, a.id);
 
-    const divForm = new FormData();
-    divForm.set("eventId", event.id);
-    divForm.set("eventType:KYORUGI", "on");
-    await generateDivisions(divForm);
-
-    const division = await db.division.findFirst({ where: { eventId: event.id } });
-    expect(division).not.toBeNull();
+    const division = await seedEnrolledDivision(event.id, athleteIds);
 
     const bracketForm = new FormData();
-    bracketForm.set("divisionId", division!.id);
+    bracketForm.set("divisionId", division.id);
     await generateBracket(bracketForm);
 
-    const cells = await db.bracketCell.findMany({ where: { divisionId: division!.id } });
+    const cells = await db.bracketCell.findMany({ where: { divisionId: division.id } });
     const match = cells.find((c) => {
       if (!c.childAId || !c.childBId || c.athleteId) return false;
       const childA = cells.find((cell) => cell.id === c.childAId)!;
@@ -745,12 +814,49 @@ describe("recordWinner", () => {
     expect(a.athleteId).toBeTruthy();
 
     const form = new FormData();
-    form.set("divisionId", division!.id);
+    form.set("divisionId", division.id);
     form.set("matchId", match.id);
     form.set("winnerId", a.athleteId!);
     await recordWinner(form);
 
     const updated = await db.bracketCell.findUnique({ where: { id: match.id } });
     expect(updated!.winnerAthleteId).toBe(a.athleteId);
+  });
+});
+
+describe("createAthlete", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  it("creates an athlete with an ACTIVE club membership", async () => {
+    const chapter = await seedChapter();
+    vi.mocked(requireRole).mockResolvedValue({
+      userId: coach.userId,
+      email: coach.email,
+      role: "coach",
+      chapterId: chapter.id,
+    } as never);
+
+    const form = new FormData();
+    form.set("name", "Dani Reyes");
+    form.set("gender", "FEMALE");
+    form.set("birthYear", "2012");
+    form.set("weightKg", "42");
+    form.set("beltType", "BLUE");
+
+    const result = await createAthlete(form);
+    expect(result.ok).toBe(true);
+
+    const athlete = await db.athlete.findFirst({ where: { name: "Dani Reyes" } });
+    expect(athlete).not.toBeNull();
+
+    const membership = await db.athleteClub.findUnique({
+      where: {
+        athleteId_chapterId: { athleteId: athlete!.id, chapterId: chapter.id },
+      },
+    });
+    expect(membership).not.toBeNull();
+    expect(membership!.status).toBe("ACTIVE");
   });
 });

@@ -41,6 +41,27 @@ export default async function EventRegistrationsPage({
     orderBy: { approvedAt: "asc" },
   });
 
+  const orderItemDivisions = await db.orderItemDivision.findMany({
+    where: { orderItem: { is: { order: { is: { eventId: id } } } } },
+    select: { orderItemId: true, division: { select: { name: true } } },
+  });
+  const divisionsByItem: Record<string, string[]> = {};
+  for (const d of orderItemDivisions) {
+    (divisionsByItem[d.orderItemId] ??= []).push(d.division.name);
+  }
+
+  const approvedDivisions = await db.approvedAthleteDivision.findMany({
+    where: { approvedAthlete: { is: { eventId: id } } },
+    select: {
+      approvedAthlete: { select: { athleteId: true } },
+      division: { select: { name: true } },
+    },
+  });
+  const divisionsByAthlete: Record<string, string[]> = {};
+  for (const d of approvedDivisions) {
+    (divisionsByAthlete[d.approvedAthlete.athleteId] ??= []).push(d.division.name);
+  }
+
   const totalApproved = approvedAthletes.length;
 
   return (
@@ -75,6 +96,8 @@ export default async function EventRegistrationsPage({
               chapter={order.chapter}
               order={order}
               approvedAthletes={approvedAthletes.filter((a) => a.chapterId === order.chapterId)}
+              divisionsByItem={divisionsByItem}
+              divisionsByAthlete={divisionsByAthlete}
             />
           ))}
         </div>

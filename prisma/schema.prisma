@@ -57,6 +57,11 @@ enum BeltType {
   BLACK
 }
 
+enum AthleteClubStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model Event {
   id                   String             @id @default(cuid())
   name                 String
@@ -72,6 +77,7 @@ model Event {
   orders               Order[]
   approvedAthletes     ApprovedAthlete[]
   divisions            Division[]
+  eventDivisions       EventDivision[]
 
   @@index([status])
   @@index([eventDate])
@@ -91,10 +97,29 @@ model Athlete {
   orderItems  OrderItem[]
   approvedAthletes ApprovedAthlete[]
   bracketCells BracketCell[]
+  clubMemberships AthleteClub[]
 
   @@index([chapterId])
   @@index([chapterId, gender])
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Athlete_name_trgm_idx")
+}
+
+model AthleteClub {
+  id        String            @id @default(cuid())
+  athleteId String
+  chapterId String
+  status    AthleteClubStatus @default(ACTIVE)
+  joinedAt  DateTime          @default(now())
+  leftAt    DateTime?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  athlete Athlete @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@unique([athleteId, chapterId])
+  @@index([chapterId, status])
+  @@index([athleteId])
 }
 
 model WeightClass {
@@ -105,6 +130,7 @@ model WeightClass {
   maxKg     Float?
   sortOrder Int
   divisions Division[]
+  eventDivisions EventDivision[]
 
   @@unique([gender, name])
   @@index([gender, sortOrder])
@@ -137,6 +163,7 @@ model OrderItem {
 
   order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   athlete     Athlete @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  divisions   OrderItemDivision[]
 
   @@unique([orderId, athleteId])
   @@index([orderId])
@@ -155,6 +182,7 @@ model ApprovedAthlete {
   chapter     Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   athlete     Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
   order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  divisions   ApprovedAthleteDivision[]
 
   @@unique([eventId, athleteId])
   @@index([chapterId])
@@ -180,6 +208,7 @@ model PaymentAttempt {
 model Division {
   id            String      @id @default(cuid())
   eventId       String
+  eventDivisionId String?
   name          String
   gender        Gender
   eventType     EventType
@@ -190,11 +219,57 @@ model Division {
   beltType      BeltType?
   createdAt     DateTime    @default(now())
   event         Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventDivision EventDivision? @relation(fields: [eventDivisionId], references: [id], onDelete: SetNull)
   weightClass   WeightClass? @relation(fields: [weightClassId], references: [id], onDelete: SetNull)
   brackets      BracketCell[]
+  orderItemDivisions OrderItemDivision[]
+  approvedAthleteDivisions ApprovedAthleteDivision[]
 
   @@unique([eventId, divisionKey])
   @@index([eventType])
+}
+
+model EventDivision {
+  id            String      @id @default(cuid())
+  eventId       String
+  name          String
+  gender        Gender
+  eventType     EventType
+  divisionKey   String
+  minAge        Int?
+  maxAge        Int?
+  weightClassId String?
+  beltType      BeltType?
+  sortOrder     Int         @default(0)
+  createdAt     DateTime    @default(now())
+  event         Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  weightClass   WeightClass? @relation(fields: [weightClassId], references: [id], onDelete: SetNull)
+  divisions     Division[]
+
+  @@unique([eventId, divisionKey])
+  @@index([eventType])
+}
+
+model OrderItemDivision {
+  id          String     @id @default(cuid())
+  orderItemId String
+  divisionId  String
+  orderItem   OrderItem  @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  division    Division   @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+
+  @@unique([orderItemId, divisionId])
+  @@index([divisionId])
+}
+
+model ApprovedAthleteDivision {
+  id                String          @id @default(cuid())
+  approvedAthleteId String
+  divisionId        String
+  approvedAthlete   ApprovedAthlete @relation(fields: [approvedAthleteId], references: [id], onDelete: Cascade)
+  division          Division        @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+
+  @@unique([approvedAthleteId, divisionId])
+  @@index([divisionId])
 }
 
 model BracketCell {
@@ -227,6 +302,7 @@ model Chapter {
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   athletes        Athlete[]
+  clubMemberships AthleteClub[]
   coachOrders     Order[]            @relation("CoachOrders")
   chapterOrders   Order[]            @relation("ChapterOrders")
   approvedAthletes ApprovedAthlete[]

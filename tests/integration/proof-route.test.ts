@@ -11,6 +11,7 @@ import {
   seedAthletes,
   seedChapter,
   seedEvent,
+  seedPool,
   type TestCoach,
 } from "./helpers";
 
@@ -67,6 +68,8 @@ describe("GET /api/payments/[id]/proof", () => {
     const form = new FormData();
     form.set("eventId", event.id);
     form.append("athleteId", athlete.id);
+    const { juniorKey } = await seedPool(event.id);
+    form.append(`divisionKey:${athlete.id}`, juniorKey);
     await registerAthletes(form);
 
     const order = await db.order.findFirst({
@@ -127,6 +130,8 @@ describe("GET /api/payments/[id]/proof", () => {
     const form = new FormData();
     form.set("eventId", event.id);
     form.append("athleteId", athlete.id);
+    const { juniorKey } = await seedPool(event.id);
+    form.append(`divisionKey:${athlete.id}`, juniorKey);
     await registerAthletes(form);
 
     const order = await db.order.findFirst({

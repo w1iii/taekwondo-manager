@@ -4,12 +4,15 @@ const { Pool } = pg;
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+const E2E_DIVISION_NAME = "Kyorugi Male Junior Open";
+
 /** Wipes all tables in FK-safe order. */
 export async function resetDb(): Promise<void> {
   await pool.query(
-    `TRUNCATE TABLE "RateLimit", "Notification", "BracketCell", "Division",
-      "TeamPayment", "Enrollment", "Event", "Athlete", "WeightClass", "Chapter"
-      CASCADE`,
+    `TRUNCATE TABLE "RateLimit", "Notification", "BracketCell", "OrderItemDivision",
+      "Division", "ApprovedAthleteDivision", "ApprovedAthlete", "EventDivision",
+      "PaymentAttempt", "OrderItem", "Order", "Event", "AthleteClub", "Athlete",
+      "WeightClass", "Chapter" CASCADE`,
   );
 }
 
@@ -20,6 +23,36 @@ export async function seedWeightClasses(): Promise<void> {
             ($2, 'FEMALE', 'Open', NULL, 200, 1)`,
     [crypto.randomUUID(), crypto.randomUUID()],
   );
+}
+
+async function maleOpenWeightClassId(): Promise<string> {
+  const { rows } = await pool.query(
+    `SELECT "id" FROM "WeightClass" WHERE "gender" = 'MALE' ORDER BY "sortOrder" ASC LIMIT 1`,
+  );
+  return rows[0].id;
+}
+
+function juniorKey(wcId: string): string {
+  return `KYORUGI|MALE|15/17|${wcId}|`;
+}
+
+/** Creates the live Division row a coach's registration materializes. */
+async function findOrCreateLiveDivision(eventId: string): Promise<{ id: string }> {
+  const wcId = await maleOpenWeightClassId();
+  const key = juniorKey(wcId);
+  const { rows } = await pool.query(
+    `INSERT INTO "Division" ("id", "eventId", "name", "gender", "eventType", "divisionKey", "minAge", "maxAge", "weightClassId", "createdAt")
+     VALUES ($1, $2, $3, 'MALE', 'KYORUGI', $4, 15, 17, $5, now())
+     ON CONFLICT ("eventId", "divisionKey") DO NOTHING
+     RETURNING "id"`,
+    [crypto.randomUUID(), eventId, E2E_DIVISION_NAME, key, wcId],
+  );
+  if (rows[0]) return rows[0];
+  const existing = await pool.query(
+    `SELECT "id" FROM "Division" WHERE "eventId" = $1 AND "divisionKey" = $2 LIMIT 1`,
+    [eventId, key],
+  );
+  return existing.rows[0];
 }
 
 export async function seedPublishedEvent(): Promise<{ id: string }> {
@@ -44,6 +77,16 @@ export async function seedPublishedEvent(): Promise<{ id: string }> {
       500,
     ],
   );
+
+  // Admin-curated available divisions (pool) for the event.
+  const wcId = await maleOpenWeightClassId();
+  await pool.query(
+    `INSERT INTO "EventDivision" ("id", "eventId", "name", "gender", "eventType", "divisionKey", "minAge", "maxAge", "weightClassId", "sortOrder", "createdAt")
+     VALUES ($1, $2, $3, 'MALE', 'KYORUGI', $4, 15, 17, $5, 0, now())
+     ON CONFLICT ("eventId", "divisionKey") DO NOTHING`,
+    [crypto.randomUUID(), id, E2E_DIVISION_NAME, juniorKey(wcId), wcId],
+  );
+
   return { id };
 }
 
@@ -56,11 +99,50 @@ export async function approveChapterByEmail(email: string) {
 
 /** Simulates the organizer approving a chapter's team payment. */
 export async function approvePayment(chapterId: string, eventId: string) {
-  await pool.query(
-    `UPDATE "TeamPayment" SET "status" = 'APPROVED', "reviewedAt" = now()
-     WHERE "chapterId" = $1 AND "eventId" = $2`,
-    [chapterId, eventId],
+  const { rows } = await pool.query(
+    `SELECT o."id" AS "orderId" FROM "Order" o
+     WHERE o."eventId" = $1 AND o."chapterId" = $2
+       AND o."status" IN ('PENDING', 'PAID') LIMIT 1`,
+    [eventId, chapterId],
   );
+  const orderId = rows[0]?.orderId;
+  if (!orderId) return;
+
+  await pool.query(
+    `UPDATE "PaymentAttempt" SET "outcome" = 'APPROVED', "reviewedAt" = now()
+     WHERE "orderId" = $1`,
+    [orderId],
+  );
+  await pool.query(`UPDATE "Order" SET "status" = 'APPROVED' WHERE "id" = $1`, [orderId]);
+
+  const items = await pool.query(
+    `SELECT "athleteId" FROM "OrderItem" WHERE "orderId" = $1`,
+    [orderId],
+  );
+  const division = await findOrCreateLiveDivision(eventId);
+  for (const item of items.rows) {
+    const approvedId = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO "ApprovedAthlete" ("id", "eventId", "chapterId", "athleteId", "orderId", "approvedAt")
+       VALUES ($1, $2, $3, $4, $5, now())
+       ON CONFLICT ("eventId", "athleteId") DO NOTHING`,
+      [approvedId, eventId, chapterId, item.athleteId, orderId],
+    );
+    const approved = await pool.query(
+      `SELECT "id" FROM "ApprovedAthlete" WHERE "eventId" = $1 AND "athleteId" = $2 LIMIT 1`,
+      [eventId, item.athleteId],
+    );
+    await pool.query(
+      `INSERT INTO "ApprovedAthleteDivision" ("id", "approvedAthleteId", "divisionId")
+       VALUES ($1, $2, $3)
+       ON CONFLICT DO NOTHING`,
+      [crypto.randomUUID(), approved.rows[0].id, division.id],
+    );
+    await pool.query(
+      `DELETE FROM "OrderItem" WHERE "orderId" = $1 AND "athleteId" = $2`,
+      [orderId, item.athleteId],
+    );
+  }
 }
 
 export type E2EDb = {
@@ -75,8 +157,9 @@ export type E2EDb = {
 };
 
 /**
- * Simulates the organizer generating divisions + bracket for the event
- * (mirrors generateDivisions/generateBracket) so the coach can view a bracket.
+ * Simulates the organizer drawing the bracket for the live division
+ * (mirrors generateBracket) so the coach can view it. Athletes must already
+ * be enrolled into that division via approvePayment/createEnrollment.
  */
 export async function seedDivisionAndBracket(
   eventId: string,
@@ -84,12 +167,11 @@ export async function seedDivisionAndBracket(
 ): Promise<void> {
   if (athleteIds.length < 2) throw new Error("seedDivisionAndBracket needs >= 2 athletes");
 
-  const divisionId = crypto.randomUUID();
-  await pool.query(
-    `INSERT INTO "Division" ("id", "eventId", "name", "gender", "eventType", "divisionKey", "minAge", "maxAge")
-     VALUES ($1, $2, $3, 'MALE', 'KYORUGI', $4, 15, 17)`,
-    [divisionId, eventId, "Kyorugi Male Junior Open", `KYORUGI|MALE|15/17|e2e|`],
+  const { rows } = await pool.query(
+    `SELECT "id" FROM "Division" WHERE "eventId" = $1 ORDER BY "createdAt" ASC LIMIT 1`,
+    [eventId],
   );
+  const divisionId = rows[0].id;
 
   const leafA = crypto.randomUUID();
   const leafB = crypto.randomUUID();
@@ -153,15 +235,18 @@ export const db: E2EDb & {
   },
   async enrollment(eventId: string, athleteId: string) {
     const { rows } = await pool.query(
-      `SELECT "id" FROM "Enrollment" WHERE "eventId" = $1 AND "athleteId" = $2 LIMIT 1`,
+      `SELECT i."id" FROM "OrderItem" i
+       JOIN "Order" o ON o."id" = i."orderId"
+       WHERE o."eventId" = $1 AND i."athleteId" = $2 LIMIT 1`,
       [eventId, athleteId],
     );
     return rows[0] ?? null;
   },
   async teamPayment(eventId: string, chapterId: string) {
     const { rows } = await pool.query(
-      `SELECT "status", "referenceNo" FROM "TeamPayment"
-       WHERE "eventId" = $1 AND "chapterId" = $2 LIMIT 1`,
+      `SELECT p."outcome" AS "status", p."referenceNo" FROM "PaymentAttempt" p
+       JOIN "Order" o ON o."id" = p."orderId"
+       WHERE o."eventId" = $1 AND o."chapterId" = $2 LIMIT 1`,
       [eventId, chapterId],
     );
     return rows[0] ?? null;
@@ -184,15 +269,32 @@ export const db: E2EDb & {
        VALUES ($1, $2, $3, $4, $5, $6, 'BLUE', now(), now())`,
       [id, chapterId, name, gender, birthYear, weightKg],
     );
+    await pool.query(
+      `INSERT INTO "AthleteClub" ("id", "athleteId", "chapterId", "status", "joinedAt", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, 'ACTIVE', now(), now(), now())`,
+      [crypto.randomUUID(), id, chapterId],
+    );
     return { id };
   },
   async createEnrollment(eventId, chapterId, athleteId) {
-    const id = crypto.randomUUID();
+    const division = await findOrCreateLiveDivision(eventId);
+    const approvedId = crypto.randomUUID();
     await pool.query(
-      `INSERT INTO "Enrollment" ("id", "eventId", "chapterId", "athleteId")
-       VALUES ($1, $2, $3, $4)`,
-      [id, eventId, chapterId, athleteId],
+      `INSERT INTO "ApprovedAthlete" ("id", "eventId", "chapterId", "athleteId", "orderId", "approvedAt")
+       VALUES ($1, $2, $3, $4, 'e2e', now())
+       ON CONFLICT ("eventId", "athleteId") DO NOTHING`,
+      [approvedId, eventId, chapterId, athleteId],
     );
-    return { id };
+    const approved = await pool.query(
+      `SELECT "id" FROM "ApprovedAthlete" WHERE "eventId" = $1 AND "athleteId" = $2 LIMIT 1`,
+      [eventId, athleteId],
+    );
+    await pool.query(
+      `INSERT INTO "ApprovedAthleteDivision" ("id", "approvedAthleteId", "divisionId")
+       VALUES ($1, $2, $3)
+       ON CONFLICT DO NOTHING`,
+      [crypto.randomUUID(), approved.rows[0].id, division.id],
+    );
+    return { id: approved.rows[0].id };
   },
 };

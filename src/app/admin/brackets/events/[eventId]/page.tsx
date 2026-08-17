@@ -56,6 +56,20 @@ export default async function AdminEventBracketsPage({
     include: { athlete: true },
   });
 
+  const approvedDivisions = await db.approvedAthleteDivision.findMany({
+    where: { divisionId: { in: event.divisions.map((d) => d.id) } },
+    select: {
+      division: { select: { name: true } },
+      approvedAthlete: { select: { athleteId: true } },
+    },
+  });
+  const divisionsByAthlete = new Map<string, string[]>();
+  for (const ad of approvedDivisions) {
+    const list = divisionsByAthlete.get(ad.approvedAthlete.athleteId) ?? [];
+    list.push(ad.division.name);
+    divisionsByAthlete.set(ad.approvedAthlete.athleteId, list);
+  }
+
   const allAthletes = entries.map((e) => e.athlete);
 
   let filtered = allAthletes;
@@ -196,12 +210,15 @@ export default async function AdminEventBracketsPage({
                       key={athlete.id}
                       className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2.5 last:border-b-0"
                     >
-                      <span className="flex min-w-0 items-center gap-2">
+                      <span className="flex min-w-0 flex-1 items-center gap-2">
                         <span className="truncate font-medium">{athlete.name}</span>
                         <Badge variant="secondary">{genderLabel(athlete.gender)}</Badge>
                         {athlete.beltType ? (
                           <Badge variant="outline">{beltLabel(athlete.beltType)}</Badge>
                         ) : null}
+                      </span>
+                      <span className="min-w-0 text-right text-xs text-muted-foreground">
+                        {divisionsByAthlete.get(athlete.id)?.join(", ") ?? "No division"}
                       </span>
                       <span className="text-sm text-muted-foreground">
                         {athlete.birthYear}
@@ -231,7 +248,7 @@ export default async function AdminEventBracketsPage({
         {event.divisions.length === 0 ? (
           <Card>
             <CardContent className="text-sm text-muted-foreground">
-              No divisions yet — generate them from the event page.
+              No divisions yet — they appear here once players register into them.
             </CardContent>
           </Card>
         ) : (

@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { requireRole } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { candidateDivisionsForEvent } from "@/lib/divisions";
 import { createEvent } from "../actions";
 import { EventForm } from "../event-form";
 
@@ -9,6 +11,10 @@ export const metadata = { title: "New event" };
 
 export default async function NewEventPage() {
   await requireRole("organizer");
+
+  const weightClasses = await db.weightClass.findMany({
+    orderBy: [{ gender: "asc" }, { sortOrder: "asc" }],
+  });
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-6">
@@ -25,7 +31,10 @@ export default async function NewEventPage() {
         </Button>
       </div>
 
-      <EventForm action={createEvent} />
+      <EventForm
+        action={createEvent}
+        candidateDivisions={candidateDivisionsForEvent(weightClasses)}
+      />
     </div>
   );
 }

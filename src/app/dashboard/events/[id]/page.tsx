@@ -15,6 +15,7 @@ import {
   formatPesos,
   isRegistrationOpen,
 } from "@/lib/events";
+import { availableDivisionsForAthlete } from "@/lib/divisions";
 import { EventStatus } from "@/generated/prisma/client";
 import { registerAthletes } from "../actions";
 import { EnrollForm } from "./enroll-form";
@@ -33,6 +34,7 @@ export default async function EventRegisterPage({
 
   const event = await db.event.findFirst({
     where: { id, status: EventStatus.PUBLISHED },
+    include: { eventDivisions: { include: { weightClass: true } } },
   });
   if (!event) notFound();
 
@@ -72,6 +74,18 @@ export default async function EventRegisterPage({
         orderBy: { name: "asc" },
       })
     : [];
+
+  const year = event.eventDate.getFullYear();
+  const availableByAthlete = Object.fromEntries(
+    eligible.map((athlete) => [
+      athlete.id,
+      availableDivisionsForAthlete(
+        athlete,
+        year,
+        event.eventDivisions,
+      ),
+    ]),
+  );
 
   const open = isRegistrationOpen(event.registrationDeadline);
 
@@ -200,6 +214,7 @@ export default async function EventRegisterPage({
                 eventId={event.id}
                 fee={event.entryFeePesos}
                 athletes={eligible}
+                availableByAthlete={availableByAthlete}
                 action={registerAthletes}
               />
             </CardContent>

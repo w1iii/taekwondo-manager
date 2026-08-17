@@ -193,6 +193,95 @@ export function buildDivisions(
   return result;
 }
 
+const ALL_BELTS: (BeltType | null)[] = [
+  null,
+  BeltType.WHITE,
+  BeltType.YELLOW,
+  BeltType.GREEN,
+  BeltType.BLUE,
+  BeltType.RED,
+  BeltType.BLACK,
+];
+
+/**
+ * Full WT candidate division set for an event, WITHOUT filtering by athlete
+ * memberships. Admin picks from this list when configuring an event's
+ * available divisions (EventDivision pool). Only divisions players actually
+ * register into are materialized as Division rows.
+ */
+export function enumerateDivisions(
+  weightClasses: WeightClassRow[],
+  eventTypes: EventType[],
+): DivisionInput[] {
+  const result: DivisionInput[] = [];
+  const keys = new Set<string>();
+
+  const push = (div: DivisionInput) => {
+    if (keys.has(div.divisionKey)) return;
+    keys.add(div.divisionKey);
+    result.push(div);
+  };
+
+  const ageKey = (g: AgeGroupDef) => `${g.minAge ?? ""}/${g.maxAge ?? ""}`;
+
+  for (const eventType of eventTypes) {
+    const typeLabel = EVENT_TYPE_LABELS[eventType];
+    const groups =
+      eventType === EventType.KYORUGI
+        ? AGE_GROUPS.filter((g) => g.kyorugi)
+        : AGE_GROUPS;
+
+    for (const gender of [Gender.MALE, Gender.FEMALE]) {
+      for (const group of groups) {
+        if (eventType === EventType.KYORUGI) {
+          const classes = weightClasses
+            .filter((w) => w.gender === gender)
+            .sort((a, b) => a.sortOrder - b.sortOrder);
+          for (const wc of classes) {
+            push({
+              name: `${typeLabel} ${group.name} ${GENDER_LABEL[gender]} ${wc.name}`,
+              gender,
+              eventType,
+              divisionKey: `KYORUGI|${gender}|${ageKey(group)}|${wc.id}|`,
+              minAge: group.minAge,
+              maxAge: group.maxAge,
+              weightClassId: wc.id,
+              beltType: null,
+            });
+          }
+        } else if (eventType === EventType.POOMSAE) {
+          for (const belt of ALL_BELTS) {
+            const suffix = belt ? ` ${BELT_LABELS[belt]}` : "";
+            push({
+              name: `${typeLabel} ${group.name} ${GENDER_LABEL[gender]}${suffix}`,
+              gender,
+              eventType,
+              divisionKey: `POOMSAE|${gender}|${ageKey(group)}||${belt ?? ""}`,
+              minAge: group.minAge,
+              maxAge: group.maxAge,
+              weightClassId: null,
+              beltType: belt,
+            });
+          }
+        } else {
+          push({
+            name: `${typeLabel} ${group.name} ${GENDER_LABEL[gender]}`,
+            gender,
+            eventType,
+            divisionKey: `${eventType}|${gender}|${ageKey(group)}||`,
+            minAge: group.minAge,
+            maxAge: group.maxAge,
+            weightClassId: null,
+            beltType: null,
+          });
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
 export function athletesInDivision(
   division: {
     gender: Gender;

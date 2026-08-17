@@ -26,10 +26,15 @@ export async function createAthlete(formData: FormData): Promise<AthleteFormStat
   }
 
   await db.athlete.create({
-    data: { ...parsed.data, chapterId: chapter.id },
+    data: {
+      ...parsed.data,
+      chapterId: chapter.id,
+      clubMemberships: { create: { chapterId: chapter.id } },
+    },
   });
 
   revalidatePath("/dashboard/roster");
+  revalidatePath("/dashboard/roster-members");
   return { ok: true };
 }
 
@@ -56,6 +61,7 @@ export async function updateAthlete(formData: FormData): Promise<AthleteFormStat
   }
 
   revalidatePath("/dashboard/roster");
+  revalidatePath("/dashboard/roster-members");
   return { ok: true };
 }
 
@@ -81,5 +87,6 @@ export async function deleteAthlete(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/dashboard/roster");
+  revalidatePath("/dashboard/roster-members");
   revalidateTag(EVENT_REGISTRATIONS_TAG, "max");
 }
