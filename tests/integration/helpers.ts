@@ -78,14 +78,19 @@ export async function seedAthletes(
 }
 
 export async function seedChapter(
-  overrides: Partial<{ status: ChapterStatus; headCoachEmail: string; name: string }> = {},
+  overrides: Partial<{
+    status: ChapterStatus;
+    headCoachEmail: string;
+    name: string;
+    gcashNumber: string;
+  }> = {},
 ) {
   return db.chapter.create({
     data: {
       name: overrides.name ?? "Test Dojang",
       province: "Negros Occidental",
       city: "Bacolod",
-      gcashNumber: "09170000000",
+      gcashNumber: overrides.gcashNumber ?? "09170000000",
       headCoachName: "Test Coach",
       headCoachEmail: overrides.headCoachEmail ?? "coach@test.ph",
       status: overrides.status ?? ChapterStatus.APPROVED,

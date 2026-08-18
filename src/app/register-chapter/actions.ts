@@ -67,6 +67,17 @@ export async function registerChapter(
     return { ok: false, error: "This email already has an active chapter registration." };
   }
 
+  const gcashTaken = await db.chapter.findFirst({
+    where: {
+      gcashNumber: gcash,
+      status: { in: [ChapterStatus.PENDING, ChapterStatus.APPROVED] },
+    },
+    select: { id: true },
+  });
+  if (gcashTaken) {
+    return { ok: false, error: "This GCash number is already registered to another chapter." };
+  }
+
   let logoUrl: string | null = null;
   if (logo instanceof File && logo.size > 0) {
     if (!logo.type.startsWith("image/")) {
