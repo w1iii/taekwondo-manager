@@ -5,11 +5,6 @@ on:
   push:
     branches: [main]
 
-env:
-  # Job-level `if` conditions cannot read the `secrets` context, so gate the
-  # e2e job through a workflow-level env flag instead.
-  E2E_ENABLED: ${{ secrets.CLERK_SECRET_KEY != '' }}
-
 jobs:
   lint-and-typecheck:
     name: Lint + Typecheck
@@ -79,13 +74,27 @@ jobs:
       - run: npx prisma migrate status
       - run: npm test
 
+  # Job-level `if` cannot read the `secrets` context, so probe for the Clerk
+  # dev keys in a tiny job and gate the e2e job on its output.
+  e2e-probe:
+    name: E2E probe
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.probe.outputs.enabled }}
+    steps:
+      - name: Check Clerk keys configured
+        id: probe
+        run: |
+          echo "enabled=${{ secrets.CLERK_SECRET_KEY != '' && secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '' }}" >> "$GITHUB_OUTPUT"
+
   # Full-stack e2e. Requires real Clerk dev keys as GitHub secrets
   # (CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY); the job self-skips
   # when they are not configured.
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
-    if: ${{ env.E2E_ENABLED == 'true' }}
+    needs: e2e-probe
+    if: ${{ needs.e2e-probe.outputs.enabled == 'true' }}
     services:
       postgres:
         image: postgres:17
