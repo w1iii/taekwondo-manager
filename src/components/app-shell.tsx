@@ -71,7 +71,9 @@ export function AppShell({
           </nav>
         </aside>
 
-        <main className="min-w-0 flex-1 px-4 py-6 md:px-8">{children}</main>
+        <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
+          <div className="animate-enter motion-reduce:animate-none">{children}</div>
+        </main>
       </div>
     </div>
   );

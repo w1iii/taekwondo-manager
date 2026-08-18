@@ -45,7 +45,7 @@ export default async function PaymentReceiptPage({
         <PrintButton />
       </div>
 
-      <Card className="print:border-none print:shadow-none">
+      <Card className="print-area print:border-none print:shadow-none">
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-center gap-2">

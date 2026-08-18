@@ -3,6 +3,8 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Reveal } from "@/components/reveal";
+import { CountUp } from "@/components/count-up";
 import { requireRole } from "@/lib/auth";
 import { claimChapterForUser, getChapterForUser, CHAPTER_STATUS_LABELS } from "@/lib/chapters";
 import { db } from "@/lib/db";
@@ -33,7 +35,7 @@ export default async function DashboardOverviewPage() {
 
   const paymentCard =
     nextEvent && chapter ? (
-      <Card>
+      <Card className="card-hover">
         <CardHeader>
           <CardDescription>Payment status</CardDescription>
           <CardTitle className="text-lg">
@@ -73,7 +75,7 @@ export default async function DashboardOverviewPage() {
         </CardContent>
       </Card>
     ) : (
-      <Card>
+      <Card className="card-hover">
         <CardHeader>
           <CardDescription>Payment status</CardDescription>
           <CardTitle className="text-lg">—</CardTitle>
@@ -85,7 +87,7 @@ export default async function DashboardOverviewPage() {
     );
 
   const nextTournamentCard = nextEvent ? (
-    <Card>
+    <Card className="card-hover">
       <CardHeader>
         <CardDescription>Next tournament</CardDescription>
         <CardTitle className="text-lg">{nextEvent.name}</CardTitle>
@@ -101,7 +103,7 @@ export default async function DashboardOverviewPage() {
       </CardContent>
     </Card>
   ) : (
-    <Card>
+    <Card className="card-hover">
       <CardHeader>
         <CardDescription>Next tournament</CardDescription>
         <CardTitle className="text-lg">—</CardTitle>
@@ -113,7 +115,7 @@ export default async function DashboardOverviewPage() {
   );
 
   const chapterCard = chapter ? (
-    <Card>
+    <Card className="card-hover">
       <CardHeader>
         <CardDescription>Chapter</CardDescription>
         <CardTitle className="text-lg">{chapter.name}</CardTitle>
@@ -131,7 +133,7 @@ export default async function DashboardOverviewPage() {
       </CardContent>
     </Card>
   ) : (
-    <Card>
+    <Card className="card-hover">
       <CardHeader>
         <CardDescription>Chapter</CardDescription>
         <CardTitle className="text-lg">No chapter linked</CardTitle>
@@ -151,33 +153,39 @@ export default async function DashboardOverviewPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Team Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          Welcome back, {user.name ?? user.email}. Manage your chapter&apos;s
-          athletes, event registration, and payment here.
-        </p>
-      </div>
+      <Reveal>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Team Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Welcome back, {user.name ?? user.email}. Manage your chapter&apos;s
+            athletes, event registration, and payment here.
+          </p>
+        </div>
+      </Reveal>
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {chapterCard}
-        <Card>
-          <CardHeader>
-            <CardDescription>Athletes registered</CardDescription>
-            <CardTitle className="text-lg">{athleteCount}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            {chapter ? (
-              <p>
-                {athleteCount} athlete{athleteCount === 1 ? "" : "s"} on your roster.
-              </p>
-            ) : (
-              <p>Link your chapter to add athletes.</p>
-            )}
-          </CardContent>
-        </Card>
-        {paymentCard}
-        {nextTournamentCard}
+        <Reveal delay={80}>{chapterCard}</Reveal>
+        <Reveal delay={160}>
+          <Card className="card-hover">
+            <CardHeader>
+              <CardDescription>Athletes registered</CardDescription>
+              <CardTitle className="text-lg">
+                <CountUp value={athleteCount} />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              {chapter ? (
+                <p>
+                  {athleteCount} athlete{athleteCount === 1 ? "" : "s"} on your roster.
+                </p>
+              ) : (
+                <p>Link your chapter to add athletes.</p>
+              )}
+            </CardContent>
+          </Card>
+        </Reveal>
+        <Reveal delay={240}>{paymentCard}</Reveal>
+        <Reveal delay={320}>{nextTournamentCard}</Reveal>
       </div>
     </div>
   );

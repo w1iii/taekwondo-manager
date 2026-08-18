@@ -81,7 +81,7 @@ export default async function BracketsCoachBracketPage({
           {champions ? (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
               <span className="flex items-center gap-1 font-semibold text-amber-600">
-                <Trophy className="size-3.5" />
+                <Trophy className="size-3.5 animate-bounce-soft motion-reduce:animate-none" />
                 {names[champions.winnerId] ?? "—"}
               </span>
               {champions.runnerUpId ? (
