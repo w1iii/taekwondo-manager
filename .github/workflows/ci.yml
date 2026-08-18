@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
 
+env:
+  # Job-level `if` conditions cannot read the `secrets` context, so gate the
+  # e2e job through a workflow-level env flag instead.
+  E2E_ENABLED: ${{ secrets.CLERK_SECRET_KEY != '' }}
+
 jobs:
   lint-and-typecheck:
     name: Lint + Typecheck
@@ -80,7 +85,7 @@ jobs:
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
-    if: ${{ secrets.CLERK_SECRET_KEY != '' }}
+    if: ${{ env.E2E_ENABLED == 'true' }}
     services:
       postgres:
         image: postgres:17
