@@ -25,9 +25,25 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    # Dummy values: the build only needs to compile. No real DB/Cloudinary/Clerk.
+    # The landing page prerenders `/` and queries the DB at build time, so the
+    # build job needs a throwaway Postgres with migrations applied. Dummy Clerk
+    # key is fine — the build only compiles/prerenders, never signs in.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: taekwondo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d taekwondo_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
-      DATABASE_URL: postgresql://dummy@localhost:5432/dummy
+      DATABASE_URL: postgresql://test:test@localhost:5432/taekwondo_test
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_dummy
       NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
       NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
@@ -40,6 +56,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npx prisma migrate deploy
       - run: npm run build
 
   test:
