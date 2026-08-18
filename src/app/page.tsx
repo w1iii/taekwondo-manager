@@ -3,6 +3,7 @@ import Image from "next/image";
 import { CalendarDays, MapPin, Tag } from "lucide-react";
 import { unstable_cache } from "next/cache";
 
+import { Reveal } from "@/components/reveal";
 import { getCurrentUser } from "@/lib/auth";
 import { roleHome } from "@/lib/roles";
 import { db } from "@/lib/db";
@@ -60,18 +61,29 @@ export default async function HomePage() {
     .slice(0, 6);
 
   return (
-    <div
-      className="bg-[#f2f2f2] text-navy-cool min-h-screen flex flex-col relative"
-      style={{
-        backgroundImage:
-          "url('https://lh3.googleusercontent.com/aida-public/AB6AXuC6efS3trwhCrV5AtGG0Y4ATFcN1Fuq0KqOwW97vA-lrR1UZdn9BP4_u7JtJOIH8HOZTz6NUgky-wNKhtcIqoBXp3pGrBAjde26ujdG7ajCNtw_g1WtCc1dMI3MFZ4bx0rTk2cNtUfoT90_oq8idg-IoKwLcE6ZyPCWvSoQGam7EkVLs73zgGwR93VNj_EZXDGvA-238pj2dsAG2Y2w552zhhhGFlF4jTi-LRKCu1gsCmq05XdGnrGryzEnkozfNsaN5A')",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundAttachment: "fixed",
-      }}
-    >
+    <div className="bg-[#f2f2f2] text-navy-cool min-h-screen flex flex-col relative overflow-hidden">
+      {/* Background image with slow zoom */}
+      <div className="absolute inset-0 z-0">
+        <div
+          className="absolute inset-0 animate-kenburns motion-reduce:animate-none"
+          style={{
+            backgroundImage:
+              "url('https://lh3.googleusercontent.com/aida-public/AB6AXuC6efS3trwhCrV5AtGG0Y4ATFcN1Fuq0KqOwW97vA-lrR1UZdn9BP4_u7JtJOIH8HOZTz6NUgky-wNKhtcIqoBXp3pGrBAjde26ujdG7ajCNtw_g1WtCc1dMI3MFZ4bx0rTk2cNtUfoT90_oq8idg-IoKwLcE6ZyPCWvSoQGam7EkVLs73zgGwR93VNj_EZXDGvA-238pj2dsAG2Y2w552zhhhGFlF4jTi-LRKCu1gsCmq05XdGnrGryzEnkozfNsaN5A')",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+          }}
+        />
+      </div>
+
       {/* Dark Overlay */}
       <div className="absolute inset-0 bg-black/60 z-0" />
+
+      {/* Ambient orbs */}
+      <div className="pointer-events-none absolute z-0 inset-0 overflow-hidden">
+        <div className="absolute -top-24 -left-24 size-[480px] rounded-full bg-action-redwood/30 blur-[110px] animate-float motion-reduce:animate-none" />
+        <div className="absolute bottom-0 -right-24 size-[520px] rounded-full bg-secondary/30 blur-[120px] animate-float-slower motion-reduce:animate-none" />
+        <div className="absolute top-1/3 right-1/4 size-[320px] rounded-full bg-tertiary-container/20 blur-[100px] animate-float motion-reduce:animate-none" />
+      </div>
 
       {/* Nav */}
       <nav className="relative z-20 w-full px-6 md:px-12 py-8 flex justify-between items-center text-white">
@@ -122,41 +134,47 @@ export default async function HomePage() {
         <div className="w-full max-w-[1400px] min-h-[600px] rounded-lg overflow-hidden relative shadow-[0_20px_50px_rgba(0,0,0,0.3)] flex flex-col p-8 md:p-16 lg:p-24">
           <main className="relative z-10 flex flex-col justify-center w-full lg:w-8/12 max-w-4xl h-full">
             <div className="flex flex-col items-start text-left">
-              <h1 className="text-5xl md:text-6xl font-extrabold text-white mb-6 leading-[1.1] tracking-tight drop-shadow-md">
-                <span className="text-white">Taekwondo</span>
-                <br />
-                <span className="font-medium text-[#ef4444]">
-                  Tournament Manager.
-                </span>
-              </h1>
-              <p className="text-lg md:text-xl mb-10 leading-relaxed max-w-2xl drop-shadow-sm text-white">
-                Chapter coaches register teams and pay once. Organizers approve,
-                draw brackets, and report results live. No public access —
-                coaches and organizers only.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 w-full">
-                {authenticated ? (
-                  <Link
-                    href={home}
-                    className="bg-action-redwood text-white text-sm font-semibold px-8 py-4 rounded-full hover:bg-tertiary-container transition-colors shadow-lg shadow-action-redwood/30 flex items-center justify-center gap-2"
-                  >
-                    Open Dashboard
-                    <span className="material-symbols-outlined text-[18px]">
-                      arrow_forward
-                    </span>
-                  </Link>
-                ) : (
-                  <Link
-                    href="/sign-up"
-                    className="bg-action-redwood text-white text-sm font-semibold px-8 py-4 rounded-full hover:bg-tertiary-container transition-colors shadow-lg shadow-action-redwood/30 flex items-center justify-center gap-2"
-                  >
-                    Get Started
-                    <span className="material-symbols-outlined text-[18px]">
-                      arrow_forward
-                    </span>
-                  </Link>
-                )}
-              </div>
+              <Reveal delay={0}>
+                <h1 className="text-5xl md:text-6xl font-extrabold text-white mb-6 leading-[1.1] tracking-tight drop-shadow-md">
+                  <span className="text-white">Taekwondo</span>
+                  <br />
+                  <span className="font-medium text-[#ef4444]">
+                    Tournament Manager.
+                  </span>
+                </h1>
+              </Reveal>
+              <Reveal delay={120}>
+                <p className="text-lg md:text-xl mb-10 leading-relaxed max-w-2xl drop-shadow-sm text-white">
+                  Chapter coaches register teams and pay once. Organizers approve,
+                  draw brackets, and report results live. No public access —
+                  coaches and organizers only.
+                </p>
+              </Reveal>
+              <Reveal delay={240}>
+                <div className="flex flex-col sm:flex-row gap-4 w-full">
+                  {authenticated ? (
+                    <Link
+                      href={home}
+                      className="group bg-action-redwood text-white text-sm font-semibold px-8 py-4 rounded-full hover:bg-tertiary-container transition-all shadow-lg shadow-action-redwood/30 flex items-center justify-center gap-2 hover:scale-[1.04] hover:shadow-xl hover:shadow-action-redwood/40 active:scale-95 motion-reduce:hover:scale-100"
+                    >
+                      Open Dashboard
+                      <span className="material-symbols-outlined text-[18px] transition-transform group-hover:translate-x-0.5">
+                        arrow_forward
+                      </span>
+                    </Link>
+                  ) : (
+                    <Link
+                      href="/sign-up"
+                      className="group bg-action-redwood text-white text-sm font-semibold px-8 py-4 rounded-full hover:bg-tertiary-container transition-all shadow-lg shadow-action-redwood/30 flex items-center justify-center gap-2 hover:scale-[1.04] hover:shadow-xl hover:shadow-action-redwood/40 active:scale-95 motion-reduce:hover:scale-100"
+                    >
+                      Get Started
+                      <span className="material-symbols-outlined text-[18px]">
+                        arrow_forward
+                      </span>
+                    </Link>
+                  )}
+                </div>
+              </Reveal>
             </div>
           </main>
         </div>
@@ -165,23 +183,22 @@ export default async function HomePage() {
       {/* Features */}
       <section className="relative z-10 w-full max-w-[1280px] mx-auto px-6 md:px-12 py-24">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {features.map((feature) => (
-            <div
-              key={feature.title}
-              className="bg-white/10 backdrop-blur-xl border border-white/10 p-8 rounded-lg flex flex-col gap-4"
-            >
-              <div className="text-action-redwood">
-                <span className="material-symbols-outlined text-[36px]">
-                  {feature.icon}
-                </span>
+          {features.map((feature, i) => (
+            <Reveal key={feature.title} delay={i * 120}>
+              <div className="bg-white/10 backdrop-blur-xl border border-white/10 p-8 rounded-lg flex flex-col gap-4 card-hover hover:bg-white/15 hover:border-white/25 hover:shadow-2xl hover:shadow-black/30">
+                <div className="text-action-redwood">
+                  <span className="material-symbols-outlined text-[36px]">
+                    {feature.icon}
+                  </span>
+                </div>
+                <h3 className="text-white text-xl font-semibold">
+                  {feature.title}
+                </h3>
+                <p className="text-surface-macadamia leading-relaxed">
+                  {feature.description}
+                </p>
               </div>
-              <h3 className="text-white text-xl font-semibold">
-                {feature.title}
-              </h3>
-              <p className="text-surface-macadamia leading-relaxed">
-                {feature.description}
-              </p>
-            </div>
+            </Reveal>
           ))}
         </div>
       </section>
@@ -189,62 +206,63 @@ export default async function HomePage() {
       {/* Upcoming Events */}
       {upcomingEvents.length > 0 && (
         <section className="relative z-10 w-full max-w-[1280px] mx-auto px-6 md:px-12 py-16">
-          <h2 className="text-2xl font-bold text-white mb-8">Upcoming Events</h2>
+          <Reveal>
+            <h2 className="text-2xl font-bold text-white mb-8">Upcoming Events</h2>
+          </Reveal>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {upcomingEvents.map((event) => (
-              <div
-                key={event.id}
-                className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-lg overflow-hidden flex flex-col"
-              >
-                {event.imageUrl ? (
-                  <div className="relative h-40 w-full">
-                    <Image
-                      src={event.imageUrl}
-                      alt={event.name}
-                      fill
-                      sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-                      className="object-cover"
-                    />
-                  </div>
-                ) : null}
-                <div className="p-5 flex flex-col flex-1">
-                  <h3 className="text-white font-semibold text-lg">{event.name}</h3>
-                  <div className="mt-3 space-y-2 text-sm text-surface-macadamia">
-                    <p className="flex items-center gap-2">
-                      <CalendarDays className="size-4 shrink-0" />
-                      {formatDate(event.eventDate)}
+            {upcomingEvents.map((event, i) => (
+              <Reveal key={event.id} delay={i * 100}>
+                <div className="group bg-white/10 backdrop-blur-xl border border-white/10 rounded-lg overflow-hidden flex flex-col card-hover hover:bg-white/15 hover:border-white/25 hover:shadow-2xl hover:shadow-black/30">
+                  {event.imageUrl ? (
+                    <div className="relative h-40 w-full overflow-hidden">
+                      <Image
+                        src={event.imageUrl}
+                        alt={event.name}
+                        fill
+                        sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                        className="object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+                      />
+                    </div>
+                  ) : null}
+                  <div className="p-5 flex flex-col flex-1">
+                    <h3 className="text-white font-semibold text-lg">{event.name}</h3>
+                    <div className="mt-3 space-y-2 text-sm text-surface-macadamia">
+                      <p className="flex items-center gap-2">
+                        <CalendarDays className="size-4 shrink-0" />
+                        {formatDate(event.eventDate)}
+                      </p>
+                      <p className="flex items-center gap-2">
+                        <MapPin className="size-4 shrink-0" />
+                        {event.location}
+                      </p>
+                      <p className="flex items-center gap-2">
+                        <Tag className="size-4 shrink-0" />
+                        {formatPesos(event.entryFeePesos)} per athlete
+                      </p>
+                    </div>
+                    <p className="mt-3 text-xs text-surface-macadamia/70">
+                      Registration closes {formatDeadline(event.registrationDeadline)}
                     </p>
-                    <p className="flex items-center gap-2">
-                      <MapPin className="size-4 shrink-0" />
-                      {event.location}
-                    </p>
-                    <p className="flex items-center gap-2">
-                      <Tag className="size-4 shrink-0" />
-                      {formatPesos(event.entryFeePesos)} per athlete
-                    </p>
-                  </div>
-                  <p className="mt-3 text-xs text-surface-macadamia/70">
-                    Registration closes {formatDeadline(event.registrationDeadline)}
-                  </p>
-                  <div className="mt-auto pt-4">
-                    {isRegistrationOpen(event.registrationDeadline) ? (
-                      <Link
-                        href={authenticated ? `/dashboard/events/${event.id}` : "/sign-in"}
-                        className="inline-flex items-center gap-1 text-sm font-semibold text-action-redwood hover:text-action-redwood/80 transition-colors"
-                      >
-                        Register
-                        <span className="material-symbols-outlined text-[16px]">
-                          arrow_forward
+                    <div className="mt-auto pt-4">
+                      {isRegistrationOpen(event.registrationDeadline) ? (
+                        <Link
+                          href={authenticated ? `/dashboard/events/${event.id}` : "/sign-in"}
+                          className="group inline-flex items-center gap-1 text-sm font-semibold text-action-redwood hover:text-action-redwood/80 transition-colors"
+                        >
+                          Register
+                          <span className="material-symbols-outlined text-[16px] transition-transform duration-200 group-hover:translate-x-0.5">
+                            arrow_forward
+                          </span>
+                        </Link>
+                      ) : (
+                        <span className="text-xs text-surface-macadamia/50">
+                          Registration closed
                         </span>
-                      </Link>
-                    ) : (
-                      <span className="text-xs text-surface-macadamia/50">
-                        Registration closed
-                      </span>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
+              </Reveal>
             ))}
           </div>
           {allEvents.filter((e) => isEventUpcoming(e.eventDate)).length > 6 && (

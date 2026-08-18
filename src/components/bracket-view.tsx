@@ -81,6 +81,7 @@ function Slot({
     >
       {isWinner && (
         <div
+          className="animate-pulse-glow motion-reduce:animate-none"
           style={{
             position: "absolute",
             left: 0,
@@ -88,6 +89,7 @@ function Slot({
             bottom: 0,
             width: 2,
             background: THEME.accent,
+            ["--pulse-color" as string]: "rgba(142, 14, 21, 0.3)",
           }}
         />
       )}
@@ -165,12 +167,14 @@ function Match({
 }) {
   return (
     <div
+      className="card-hover"
       style={{
         width: CARD_W,
         background: THEME.cardBg,
         border: `1px solid ${THEME.border}`,
         borderRadius: 6,
         overflow: "hidden",
+        transition: "transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease",
       }}
     >
       <Slot num={top.num} name={top.name} score={top.score} isWinner={top.isWinner} isVerified={top.isVerified} divider />
@@ -299,7 +303,16 @@ export function BracketView({
           );
 
           return (
-            <div key={round} style={{ display: "flex", alignItems: "flex-start", gap: 20 }}>
+            <div
+              key={round}
+              className="animate-enter motion-reduce:animate-none"
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 20,
+                animationDelay: `${colIdx * 120}ms`,
+              }}
+            >
               {/* Round column */}
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                 <div
@@ -378,7 +391,15 @@ export function BracketView({
         })}
 
         {/* Champion slot */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div
+          className="animate-enter motion-reduce:animate-none"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            animationDelay: `${columns.length * 120}ms`,
+          }}
+        >
           <div
             style={{
               height: LABEL_H,
@@ -397,6 +418,7 @@ export function BracketView({
           </div>
           <div style={{ position: "relative", width: CARD_W, height: totalH }}>
             <div
+              className="animate-pulse-glow motion-reduce:animate-none"
               style={{
                 position: "absolute",
                 top: totalH / 2 - CARD_H / 2,
@@ -411,9 +433,15 @@ export function BracketView({
                 justifyContent: "center",
                 gap: 6,
                 padding: "0 8px",
+                ["--pulse-color" as string]: "rgba(142, 14, 21, 0.18)",
               }}
             >
-              <span style={{ fontSize: 15 }}>🏆</span>
+              <span
+                className="animate-bounce-soft motion-reduce:animate-none"
+                style={{ fontSize: 15, display: "inline-block" }}
+              >
+                🏆
+              </span>
               <span
                 style={{
                   fontSize: 12,
