@@ -235,11 +235,13 @@ export function BracketView({
   nameById,
   verifiedById,
   matchControls,
+  innerId,
 }: {
   cells: Cell[];
   nameById: Record<string, string>;
   verifiedById?: Record<string, boolean>;
   matchControls?: (match: MatchDescriptor) => React.ReactNode;
+  innerId?: string;
 }) {
   if (cells.length === 0) return null;
 
@@ -285,7 +287,7 @@ export function BracketView({
         padding: "28px 20px",
       }}
     >
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 20, minWidth: "max-content" }}>
+      <div id={innerId} style={{ display: "flex", alignItems: "flex-start", gap: 20, minWidth: "max-content" }}>
         {columns.map(({ round, roundMatches }, colIdx) => {
           const centers = roundCenters(roundMatches.length, totalH);
           const isFinal = roundMatches.length === 1;

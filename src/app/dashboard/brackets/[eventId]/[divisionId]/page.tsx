@@ -7,6 +7,7 @@ import { requireRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatDate } from "@/lib/events";
 import { BracketView } from "@/components/bracket-view";
+import { BracketPdfButton } from "@/components/bracket-pdf-button";
 import { LiveBracketsRefresh } from "@/components/live-brackets-refresh";
 import { championsOf } from "@/lib/brackets";
 import { getBracketCells, getPublishedEvent } from "@/lib/brackets-queries";
@@ -55,6 +56,12 @@ export default async function BracketsCoachBracketPage({
             {formatDate(event.eventDate)}
           </p>
         </div>
+        {cells.length > 0 && (
+          <BracketPdfButton
+            targetId="bracket-pdf"
+            filename={`${slug(division.name)}.pdf`}
+          />
+        )}
       </div>
 
       <p className="text-xs text-muted-foreground">
@@ -89,6 +96,7 @@ export default async function BracketsCoachBracketPage({
             cells={cells}
             nameById={names}
             verifiedById={verifiedFor(cells, paidAthletes)}
+            innerId="bracket-pdf"
           />
         </>
       )}
@@ -117,4 +125,13 @@ function verifiedFor(
     }
   }
   return map;
+}
+
+function slug(value: string): string {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "bracket"
+  );
 }

@@ -11,6 +11,7 @@ import { formatDate } from "@/lib/events";
 import { athletesInDivision, EVENT_TYPE_LABELS } from "@/lib/divisions";
 import { beltLabel, genderLabel } from "@/lib/athletes";
 import { BracketView } from "@/components/bracket-view";
+import { BracketPdfButton } from "@/components/bracket-pdf-button";
 import { ActionButton } from "@/components/action-button";
 import { generateBracket, resetBracket } from "../actions";
 import { MatchWinnerControls } from "../match-winner-controls";
@@ -97,6 +98,12 @@ export default async function DivisionBracketPage({
             <input type="hidden" name="divisionId" value={division.id} />
             <ActionButton label="Reset" variant="outline" pendingLabel="Clearing…" />
           </form>
+          {cells.length > 0 && (
+            <BracketPdfButton
+              targetId="bracket-pdf"
+              filename={`${slug(division.name)}.pdf`}
+            />
+          )}
         </div>
       </div>
 
@@ -120,6 +127,7 @@ export default async function DivisionBracketPage({
         <BracketView
           cells={cells}
           nameById={nameById}
+          innerId="bracket-pdf"
           matchControls={(match) => (
             <MatchWinnerControls divisionId={division.id} match={match} />
           )}
@@ -163,5 +171,14 @@ export default async function DivisionBracketPage({
         </section>
       )}
     </div>
+  );
+}
+
+function slug(value: string): string {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "bracket"
   );
 }
