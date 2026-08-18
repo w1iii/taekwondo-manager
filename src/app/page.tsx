@@ -61,7 +61,7 @@ export default async function HomePage() {
     .slice(0, 6);
 
   return (
-    <div className="bg-[#f2f2f2] text-navy-cool min-h-screen flex flex-col relative overflow-hidden">
+    <div className="bg-[#f2f2f2] text-navy-cool min-h-screen flex flex-col relative overflow-hidden animate-fade-in">
       {/* Background image with slow zoom */}
       <div className="absolute inset-0 z-0">
         <div
@@ -285,12 +285,12 @@ export default async function HomePage() {
             &copy; 2026 TKD ARENA Taekwondo Systems
           </p>
           <div className="flex gap-6">
-            <a
+            <Link
               className="text-xs hover:text-white/80 hover:underline transition-all uppercase tracking-wider"
-              href="#"
+              href="/contact"
             >
               Contact Us
-            </a>
+            </Link>
           </div>
         </div>
       </footer>
