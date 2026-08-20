@@ -38,7 +38,7 @@ export function AppShell({
               </SheetHeader>
               <nav className="mt-4 space-y-1">
                 {nav.map((item) => (
-                  <NavLink key={item.href} item={item} />
+                  <NavLink key={item.href} item={item} items={nav} />
                 ))}
               </nav>
             </SheetContent>
@@ -64,9 +64,9 @@ export function AppShell({
 
       <div className="flex flex-1">
         <aside className="hidden w-64 border-r bg-muted/30 md:block">
-          <nav className="sticky top-14 space-y-1 p-3">
+          <nav className="sticky top-14 space-y-0.5">
             {nav.map((item) => (
-              <NavLink key={item.href} item={item} />
+              <NavLink key={item.href} item={item} items={nav} />
             ))}
           </nav>
         </aside>
