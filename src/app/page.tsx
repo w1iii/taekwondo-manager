@@ -67,6 +67,7 @@ export default async function HomePage() {
         <div
           className="absolute inset-0 animate-kenburns motion-reduce:animate-none"
           style={{
+            backgroundColor: "#111113",
             backgroundImage:
               "url('https://lh3.googleusercontent.com/aida-public/AB6AXuC6efS3trwhCrV5AtGG0Y4ATFcN1Fuq0KqOwW97vA-lrR1UZdn9BP4_u7JtJOIH8HOZTz6NUgky-wNKhtcIqoBXp3pGrBAjde26ujdG7ajCNtw_g1WtCc1dMI3MFZ4bx0rTk2cNtUfoT90_oq8idg-IoKwLcE6ZyPCWvSoQGam7EkVLs73zgGwR93VNj_EZXDGvA-238pj2dsAG2Y2w552zhhhGFlF4jTi-LRKCu1gsCmq05XdGnrGryzEnkozfNsaN5A')",
             backgroundSize: "cover",
